@@ -64,6 +64,29 @@ class ExecutorService:
         self.contexts[sandbox_id] = context
         logger.info(f"Context created for sandbox {sandbox_id}")
 
+    def execute_code(self, sandbox_id: str, code: str) -> str:
+        """
+        Execute code in a specific sandbox.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            code: Code to execute
+        Returns:
+            Output from the code execution
+        """
+        if sandbox_id not in self.sandboxes:
+            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
+            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+
+        sandbox = self.sandboxes[sandbox_id]
+        context = self.contexts[sandbox_id]
+
+        logger.info(f"Executing code in sandbox {sandbox_id}")
+        output = sandbox.run_code(code, context=context)
+        logger.info(f"Code execution completed in sandbox {sandbox_id}")
+
+        return output
+
     async def upload_data_files(
         self,
         sandbox_id: str,

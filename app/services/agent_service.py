@@ -34,6 +34,20 @@ class AgentService:
             sandbox_id, data_files
         )
 
+        generated_code = (
+            "# Example generated code\n"
+            "def main():\n"
+            "    print('Hello from the sandbox!')\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    main()\n"
+        )
+        logger.info("Executing generated code in sandbox...")
+        execution_result = self.executor_service.execute_code(
+            sandbox_id, generated_code
+        )
+        logger.info(f"Execution result: {execution_result}")
+
         self.executor_service.destroy_sandbox(sandbox_id)
 
         logger.info(f"Task processing completed for sandbox {sandbox_id}")
