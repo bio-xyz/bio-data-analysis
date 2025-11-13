@@ -1,4 +1,3 @@
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -6,17 +5,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_logger, setup_logging
 from app.routers import agent_router
 
 load_dotenv()
+setup_logging()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -35,8 +30,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-allow_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 # Configure CORS
+allow_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,

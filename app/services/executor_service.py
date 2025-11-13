@@ -1,15 +1,17 @@
-import logging
 from typing import Dict, List
 
-from e2b_code_interpreter import Sandbox
+from e2b_code_interpreter import Context, Sandbox
 from fastapi import UploadFile
 
-logger = logging.getLogger(__name__)
+from app.config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ExecutorService:
     def __init__(self):
         self.sandboxes: Dict[str, Sandbox] = {}
+        self.contexts: Dict[str, Context] = {}
 
     def create_sandbox(self) -> str:
         """
@@ -23,6 +25,8 @@ class ExecutorService:
         sandbox_id = sandbox.get_info().sandbox_id
 
         self.sandboxes[sandbox_id] = sandbox
+        self.create_context(sandbox_id)
+
         logger.info(f"Sandbox created with ID: {sandbox_id}")
         return sandbox_id
 
@@ -42,6 +46,23 @@ class ExecutorService:
         sandbox.kill()
         del sandbox
         logger.info(f"Sandbox {sandbox_id} destroyed successfully")
+
+    def create_context(self, sandbox_id: str):
+        """
+        Create new code execution context for a specific sandbox.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+        """
+        if sandbox_id not in self.sandboxes:
+            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
+            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+
+        logger.info(f"Creating context for sandbox {sandbox_id}")
+        sandbox = self.sandboxes[sandbox_id]
+        context = sandbox.create_code_context()
+        self.contexts[sandbox_id] = context
+        logger.info(f"Context created for sandbox {sandbox_id}")
 
     async def upload_data_files(
         self,
