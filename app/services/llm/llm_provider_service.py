@@ -1,4 +1,3 @@
-import copy
 import json
 import uuid
 from typing import Dict, Optional

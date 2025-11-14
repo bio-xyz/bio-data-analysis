@@ -5,7 +5,7 @@ from fastapi import UploadFile
 from app.config import get_logger, settings
 from app.models.task import TaskRequest, TaskResponse
 from app.services.executor_service import ExecutorService
-from app.services.llm_provider_service import LLMProviderService
+from app.services.llm import LLMProviderService
 
 logger = get_logger(__name__)
 
