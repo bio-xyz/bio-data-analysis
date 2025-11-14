@@ -201,12 +201,13 @@ class LLMProviderService:
             content = ""
             if artifact_data.get("id"):
                 content = mapped_results.get(artifact_data["id"], "")
-            elif artifact_data.get("path"):
-                content = artifact_data["path"]
 
             artifact = ArtifactResponse(
-                description=artifact_data.get("description") or "",
+                description=artifact_data.get("description"),
                 type=artifact_data.get("type") or "unknown",
+                filename=artifact_data.get("filename"),
+                path=artifact_data.get("path"),
+                id=artifact_data.get("id") or str(uuid.uuid4()),
                 content=content,
             )
             artifacts.append(artifact)

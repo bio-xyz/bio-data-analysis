@@ -56,6 +56,18 @@ class ArtifactResponse(BaseModel):
         "",
         description="Content (base64) or reference to the artifact generated during task execution",
     )
+    filename: str | None = Field(
+        None,
+        description="Filename of the artifact generated during task execution",
+    )
+    path: str | None = Field(
+        None,
+        description="Path to the artifact file if applicable",
+    )
+    id: str | None = Field(
+        None,
+        description="Unique identifier for the artifact if applicable",
+    )
 
 
 class TaskResponse(BaseModel):

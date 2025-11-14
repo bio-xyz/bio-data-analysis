@@ -40,13 +40,15 @@ There are TWO types of artifacts:
 
 For EACH artifact, provide:
 - **description**: What the artifact contains
-- **type**: One of: "image", "chart", "table", "csv", "json", "text", "plot"
+- **type**: One of: "image", "chart", "table", "csv", "json", "text", "plot", "png"
 - **path**: ONLY if explicitly saved in code (e.g., "/home/user/output.csv") - must be exact path from code
+- **filename**: if path is provided, extract the filename from the path (e.g., "output.csv"), if not, provide a reasonable filename based on context which is not matched to any path in the code
 - **id**: ONLY if present in execution result artifacts - must be exact ID from execution result
 
 IMPORTANT: 
 - Each artifact must have EITHER "path" OR "id", never both
-- NEVER make up or guess file paths - only use paths that appear explicitly in the code
+- Chart artifacts are typically from libraries like matplotlib, seaborn, plotly, etc. and their value is base64-encoded PNG
+- NEVER make up or guess file paths - only use paths that appear explicitly in the code or as an output
 - NEVER modify or generate IDs - only use IDs that exist in the execution result
 - **AVOID DUPLICATES**: If a plot is both saved to a file (plt.savefig) AND appears in execution results, prefer the file-based artifact with "path" and SKIP the execution result artifact. Do not list the same visualization twice.
 - If multiple execution result artifacts represent the same plot/figure, include only ONE of them
@@ -58,14 +60,16 @@ Return your response in the following JSON format:
   "artifacts": [
     {
       "description": "Description of the artifact",
-      "type": "image|chart|table|csv|json|text|plot",
+      "type": "image|png|chart|table|csv|json|text|plot",
       "path": "/exact/path/from/code.ext",
+      "filename": "output.ext",
       "id": null
     },
     {
       "description": "Description of execution result artifact",
-      "type": "plot",
+      "type": "png|text",
       "path": null,
+      "filename": "output.ext",
       "id": "uuid-from-execution-result"
     }
   ]

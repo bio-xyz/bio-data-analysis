@@ -1,3 +1,5 @@
+import base64
+
 from fastapi import UploadFile
 
 from app.config import get_logger, settings
@@ -56,14 +58,20 @@ class AgentService:
         )
         logger.info(f"Execution result: {execution_result}")
 
-        self.executor_service.destroy_sandbox(sandbox_id)
-
-        logger.info(f"Task processing completed for sandbox {sandbox_id}")
-
         task_response = self.llm_response_generator.generate_task_response(
             task_description=task.task_description,
             generated_code=generated_code,
             execution_result=execution_result,
         )
+
+        for artifact in task_response.artifacts:
+            if artifact.path:
+                artifact.content = base64.b64encode(
+                    self.executor_service.download_file(sandbox_id, artifact.path)
+                ).decode("utf-8")
+
+        self.executor_service.destroy_sandbox(sandbox_id)
+
+        logger.info(f"Task processing completed for sandbox {sandbox_id}")
 
         return task_response

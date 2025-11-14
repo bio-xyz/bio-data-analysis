@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List
 
 from e2b_code_interpreter import Context, Execution, Sandbox
@@ -132,6 +133,41 @@ class ExecutorService:
 
         logger.info(f"Successfully uploaded {len(uploaded_files)} files")
         return uploaded_files
+
+    def download_file(self, sandbox_id: str, file_path: str) -> bytearray:
+        """
+        Download a file from a specific sandbox.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            file_path: Path of the file to download
+        Returns:
+            Content of the downloaded file as bytes
+        """
+        if sandbox_id not in self.sandboxes:
+            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
+            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+
+        sandbox = self.sandboxes[sandbox_id]
+
+        if not sandbox.files.exists(file_path):
+            logger.info("Checking default working directory for the file...")
+            file_path = os.path.join(settings.DEFAULT_WORKING_DIRECTORY, file_path)
+            if not sandbox.files.exists(file_path):
+                logger.error(
+                    f"File '{file_path}' does not exist in sandbox '{sandbox_id}'"
+                )
+                raise FileNotFoundError(
+                    f"File '{file_path}' does not exist in sandbox '{sandbox_id}'"
+                )
+
+        logger.info(f"Downloading file {file_path} from sandbox {sandbox_id}")
+        file_content = sandbox.files.read(file_path, format="bytes")
+        logger.info(
+            f"File {file_path} downloaded successfully from sandbox {sandbox_id}"
+        )
+
+        return file_content
 
     def destroy_all_sandboxes(self):
         """Destroy all sandboxes."""
