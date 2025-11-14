@@ -1,9 +1,9 @@
 from typing import Dict, List
 
-from e2b_code_interpreter import Context, Sandbox
+from e2b_code_interpreter import Context, Execution, Sandbox
 from fastapi import UploadFile
 
-from app.config import get_logger
+from app.config import get_logger, settings
 
 logger = get_logger(__name__)
 
@@ -60,11 +60,11 @@ class ExecutorService:
 
         logger.info(f"Creating context for sandbox {sandbox_id}")
         sandbox = self.sandboxes[sandbox_id]
-        context = sandbox.create_code_context()
+        context = sandbox.create_code_context(cwd=settings.DEFAULT_WORKING_DIRECTORY)
         self.contexts[sandbox_id] = context
         logger.info(f"Context created for sandbox {sandbox_id}")
 
-    def execute_code(self, sandbox_id: str, code: str) -> str:
+    def execute_code(self, sandbox_id: str, code: str) -> Execution:
         """
         Execute code in a specific sandbox.
 
@@ -91,7 +91,7 @@ class ExecutorService:
         self,
         sandbox_id: str,
         data_files: List[UploadFile],
-        target_folder: str = "/home/user/data",
+        target_folder: str = settings.DEFAULT_DATA_DIRECTORY,
     ) -> List[str]:
         """
         Upload data files to a specific sandbox's user_data folder.

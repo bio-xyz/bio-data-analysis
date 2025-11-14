@@ -1,8 +1,9 @@
 from fastapi import UploadFile
 
-from app.config import get_logger
-from app.models.task import TaskRequest
+from app.config import get_logger, settings
+from app.models.task import TaskRequest, TaskResponse
 from app.services.executor_service import ExecutorService
+from app.services.llm_provider_service import LLMProviderService
 
 logger = get_logger(__name__)
 
@@ -12,8 +13,16 @@ class AgentService:
 
     def __init__(self):
         self.executor_service = ExecutorService()
+        self.llm_code_generator = LLMProviderService(
+            model_name=settings.CODE_GENERATION_MODEL
+        )
+        self.llm_response_generator = LLMProviderService(
+            model_name=settings.RESPONSE_GENERATION_MODEL
+        )
 
-    async def process_task(self, task: TaskRequest, data_files: list[UploadFile]):
+    async def process_task(
+        self, task: TaskRequest, data_files: list[UploadFile]
+    ) -> TaskResponse:
         """
         Process the given task with optional data files. Agent generates the code, executes in a sandbox, and returns results.
 
@@ -34,14 +43,13 @@ class AgentService:
             sandbox_id, data_files
         )
 
-        generated_code = (
-            "# Example generated code\n"
-            "def main():\n"
-            "    print('Hello from the sandbox!')\n"
-            "\n"
-            "if __name__ == '__main__':\n"
-            "    main()\n"
+        generated_code = self.llm_code_generator.generate_code(
+            task_description=task.task_description,
+            data_files_description=task.data_files_description,
+            uploaded_files=uploaded_files,
         )
+        logger.error(f"Generated code: {generated_code}")
+
         logger.info("Executing generated code in sandbox...")
         execution_result = self.executor_service.execute_code(
             sandbox_id, generated_code
@@ -51,10 +59,11 @@ class AgentService:
         self.executor_service.destroy_sandbox(sandbox_id)
 
         logger.info(f"Task processing completed for sandbox {sandbox_id}")
-        return {
-            "filenames": [file.filename for file in data_files],
-            "task": task.task_description,
-            "data_files_description": task.data_files_description,
-            "uploaded_files": uploaded_files,
-            "sandbox_id": sandbox_id,
-        }
+
+        task_response = self.llm_response_generator.generate_task_response(
+            task_description=task.task_description,
+            generated_code=generated_code,
+            execution_result=execution_result,
+        )
+
+        return task_response

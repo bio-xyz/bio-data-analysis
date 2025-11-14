@@ -1,19 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 
-from app.models.task import TaskRequest
+from app.models.task import TaskRequest, TaskResponse
 from app.services.agent_service import AgentService
 
 router = APIRouter()
 agent_service = AgentService()
 
 
-@router.post("/agent/run", summary="Run agent with code interpreter")
+@router.post(
+    "/agent/run", summary="Run agent with code interpreter", response_model=TaskResponse
+)
 async def run_agent_with_code_interpreter(
     task: Annotated[TaskRequest, Depends(TaskRequest.as_form)],
-    data_files: Annotated[list[UploadFile], File(...)],
-):
+    data_files: Annotated[list[UploadFile], File(...)] = [],
+) -> TaskResponse:
     """
     Run an agent with code interpreter capabilities based on the provided task description and optional data files.
 
