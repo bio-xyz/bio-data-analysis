@@ -1,10 +1,13 @@
 import logging
 
+from app.config.settings import settings
+
 
 def setup_logging():
     """Configure logging with colored output."""
+    log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler()],
     )

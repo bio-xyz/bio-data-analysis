@@ -9,6 +9,9 @@ load_dotenv()
 class Settings:
     """Application settings."""
 
+    # Logging Configuration
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
     # LLM Configuration
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")

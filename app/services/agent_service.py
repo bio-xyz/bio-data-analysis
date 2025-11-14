@@ -50,13 +50,13 @@ class AgentService:
             data_files_description=task.data_files_description,
             uploaded_files=uploaded_files,
         )
-        logger.error(f"Generated code: {generated_code}")
+        logger.debug(f"Generated code: {generated_code}")
 
         logger.info("Executing generated code in sandbox...")
         execution_result = self.executor_service.execute_code(
             sandbox_id, generated_code
         )
-        logger.info(f"Execution result: {execution_result}")
+        logger.debug(f"Execution result: {execution_result}")
 
         task_response = self.llm_response_generator.generate_task_response(
             task_description=task.task_description,

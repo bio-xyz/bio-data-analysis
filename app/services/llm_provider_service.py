@@ -155,7 +155,7 @@ class LLMProviderService:
 
         execution_json = json.dumps(execution_dictionary)
 
-        logger.error(f"Execution JSON: {execution_json}")
+        logger.debug(f"Execution JSON: {execution_json}")
 
         # Build the prompt
         system_prompt = get_task_response_system_prompt()
@@ -173,7 +173,7 @@ class LLMProviderService:
 
         # Generate response using the LLM
         response_text = self._generate_response(messages=messages)
-        logger.error(f"LLM Response Text: {response_text}")
+        logger.debug(f"LLM Response Text: {response_text}")
 
         # Parse JSON response
         try:
