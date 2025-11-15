@@ -64,15 +64,13 @@ class OpenAIService(BaseLLMService):
                 f"Model '{self.model_name}' requires OPENAI_API_KEY to be set"
             )
 
-        try:
+        client_kwargs = {"api_key": settings.OPENAI_API_KEY}
+        if settings.OPENAI_CUSTOM_BASE_URL:
+            client_kwargs["base_url"] = settings.OPENAI_CUSTOM_BASE_URL
 
-            OpenAIService._client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            logger.info("OpenAI client instantiated successfully")
-            return OpenAIService._client
-        except ImportError:
-            raise ImportError(
-                "openai package is required for OpenAI models. Install with: pip install openai"
-            )
+        OpenAIService._client = OpenAI(**client_kwargs)
+        logger.info("OpenAI client instantiated successfully")
+        return OpenAIService._client
 
     def generate_response(
         self,

@@ -1,3 +1,3 @@
-from app.services.llm.llm_provider_service import LLMProviderService
+from app.services.llm.llm_service import LLMService
 
-__all__ = ["LLMProviderService"]
+__all__ = ["LLMService"]

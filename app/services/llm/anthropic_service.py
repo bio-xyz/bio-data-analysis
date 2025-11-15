@@ -64,14 +64,13 @@ class AnthropicService(BaseLLMService):
                 f"Model '{self.model_name}' requires ANTHROPIC_API_KEY to be set"
             )
 
-        try:
-            AnthropicService._client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-            logger.info("Anthropic client instantiated successfully")
-            return AnthropicService._client
-        except ImportError:
-            raise ImportError(
-                "anthropic package is required for Anthropic models. Install with: pip install anthropic"
-            )
+        client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
+        if settings.ANTHROPIC_CUSTOM_BASE_URL:
+            client_kwargs["base_url"] = settings.ANTHROPIC_CUSTOM_BASE_URL
+
+        AnthropicService._client = Anthropic(**client_kwargs)
+        logger.info("Anthropic client instantiated successfully")
+        return AnthropicService._client
 
     def generate_response(
         self,

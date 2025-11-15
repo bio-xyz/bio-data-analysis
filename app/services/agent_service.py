@@ -5,7 +5,7 @@ from fastapi import UploadFile
 from app.config import get_logger, settings
 from app.models.task import TaskRequest, TaskResponse
 from app.services.executor_service import ExecutorService
-from app.services.llm import LLMProviderService
+from app.services.llm import LLMService
 
 logger = get_logger(__name__)
 
@@ -15,11 +15,9 @@ class AgentService:
 
     def __init__(self):
         self.executor_service = ExecutorService()
-        self.llm_code_generator = LLMProviderService(
-            model_name=settings.CODE_GENERATION_MODEL
-        )
-        self.llm_response_generator = LLMProviderService(
-            model_name=settings.RESPONSE_GENERATION_MODEL
+        self.llm_code_generator = LLMService(llm_config=settings.CODE_GENERATION_LLM)
+        self.llm_response_generator = LLMService(
+            llm_config=settings.RESPONSE_GENERATION_LLM
         )
 
     async def process_task(

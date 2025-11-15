@@ -6,6 +6,7 @@ from e2b_code_interpreter import Execution
 from e2b_code_interpreter.models import serialize_results
 
 from app.config import get_logger, settings
+from app.models.llm_config import LLMConfig
 from app.models.task import AnswerResponse, ArtifactResponse, TaskResponse
 from app.prompts import (
     build_code_generation_prompt,
@@ -20,43 +21,54 @@ from app.services.llm.openai_service import OpenAIService
 logger = get_logger(__name__)
 
 
-class LLMProviderService:
+class LLMService:
     """Service to handle LLM provider selection and interaction."""
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, llm_config: Optional[LLMConfig] = None):
         """
         Initialize the LLM provider service.
 
         Args:
-            model_name: The name of the model to use. If not provided, uses DEFAULT_MODEL from settings.
+            llm_config: The LLM configuration to use. If not provided, uses DEFAULT_LLM from settings.
         """
-        self.model_name = model_name or settings.DEFAULT_MODEL
+        self.llm_config = llm_config or settings.DEFAULT_LLM
         self.service = self._get_service()
 
     def _get_service(self) -> BaseLLMService:
         """
-        Get the appropriate LLM service based on the model name and configuration.
+        Get the appropriate LLM service based on the provider configuration.
 
         Returns:
             BaseLLMService: The configured LLM service.
 
         Raises:
-            ValueError: If no suitable provider is available or configured.
+            ValueError: If the provider is not supported or not configured properly.
         """
-        # Check OpenAI first
-        if OpenAIService.is_supported(self.model_name):
-            logger.info(f"Using OpenAI service for model: {self.model_name}")
-            return OpenAIService(self.model_name)
+        provider = self.llm_config.provider.lower()
+        model_name = self.llm_config.model_name
 
-        # Check Anthropic
-        if AnthropicService.is_supported(self.model_name):
-            logger.info(f"Using Anthropic service for model: {self.model_name}")
-            return AnthropicService(self.model_name)
+        if provider == "openai":
+            if not OpenAIService.is_supported(model_name):
+                raise ValueError(
+                    f"OpenAI provider is not properly configured. "
+                    f"Please ensure OPENAI_API_KEY is set and correct model name is used."
+                )
+            logger.info(f"Using OpenAI service for model: {model_name}")
+            return OpenAIService(model_name=model_name)
 
-        raise ValueError(
-            f"No suitable LLM provider found for model: {self.model_name}. "
-            "Please check your configuration for possible API_KEY and model name mismatches."
-        )
+        elif provider == "anthropic":
+            if not AnthropicService.is_supported(model_name):
+                raise ValueError(
+                    f"Anthropic provider is not properly configured. "
+                    f"Please ensure ANTHROPIC_API_KEY is set and correct model name is used."
+                )
+            logger.info(f"Using Anthropic service for model: {model_name}")
+            return AnthropicService(model_name=model_name)
+
+        else:
+            raise ValueError(
+                f"Unsupported provider: {provider}. Supported providers: openai, anthropic"
+            )
 
     def _generate_response(
         self,
