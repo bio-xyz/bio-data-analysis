@@ -1,7 +1,7 @@
 import os
 from typing import Dict, List
 
-from e2b_code_interpreter import Context, Execution, Sandbox
+from e2b_code_interpreter import Context, EntryInfo, Execution, Sandbox
 from fastapi import UploadFile
 
 from app.config import get_logger, settings
@@ -13,6 +13,20 @@ class ExecutorService:
     def __init__(self):
         self.sandboxes: Dict[str, Sandbox] = {}
         self.contexts: Dict[str, Context] = {}
+
+    def _validate_sandbox_exists(self, sandbox_id: str) -> None:
+        """
+        Validate that a sandbox exists.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+
+        Raises:
+            ValueError: If sandbox does not exist
+        """
+        if sandbox_id not in self.sandboxes:
+            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
+            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
 
     def create_sandbox(self) -> str:
         """
@@ -38,9 +52,7 @@ class ExecutorService:
         Args:
             sandbox_id: Unique identifier for the sandbox to destroy
         """
-        if sandbox_id not in self.sandboxes:
-            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
-            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+        self._validate_sandbox_exists(sandbox_id)
 
         logger.info(f"Destroying sandbox: {sandbox_id}")
         sandbox = self.sandboxes.pop(sandbox_id)
@@ -55,9 +67,7 @@ class ExecutorService:
         Args:
             sandbox_id: Unique identifier for the sandbox
         """
-        if sandbox_id not in self.sandboxes:
-            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
-            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+        self._validate_sandbox_exists(sandbox_id)
 
         logger.info(f"Creating context for sandbox {sandbox_id}")
         sandbox = self.sandboxes[sandbox_id]
@@ -75,9 +85,7 @@ class ExecutorService:
         Returns:
             Output from the code execution
         """
-        if sandbox_id not in self.sandboxes:
-            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
-            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+        self._validate_sandbox_exists(sandbox_id)
 
         sandbox = self.sandboxes[sandbox_id]
         context = self.contexts[sandbox_id]
@@ -105,9 +113,7 @@ class ExecutorService:
         Returns:
             List of uploaded file paths
         """
-        if sandbox_id not in self.sandboxes:
-            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
-            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+        self._validate_sandbox_exists(sandbox_id)
 
         sandbox = self.sandboxes[sandbox_id]
 
@@ -144,9 +150,7 @@ class ExecutorService:
         Returns:
             Content of the downloaded file as bytes
         """
-        if sandbox_id not in self.sandboxes:
-            logger.error(f"Sandbox with ID '{sandbox_id}' does not exist")
-            raise ValueError(f"Sandbox with ID '{sandbox_id}' does not exist")
+        self._validate_sandbox_exists(sandbox_id)
 
         sandbox = self.sandboxes[sandbox_id]
 
@@ -166,8 +170,30 @@ class ExecutorService:
         logger.info(
             f"File {file_path} downloaded successfully from sandbox {sandbox_id}"
         )
-
         return file_content
+
+    def list_files(
+        self, sandbox_id: str, directory: str = settings.DEFAULT_WORKING_DIRECTORY
+    ) -> List[EntryInfo]:
+        """
+        List files in a specific directory of a sandbox.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            directory: Directory to list files from (default: /home/user/workspace)
+        Returns:
+            List of file paths in the specified directory
+        """
+        self._validate_sandbox_exists(sandbox_id)
+
+        sandbox = self.sandboxes[sandbox_id]
+
+        logger.info(f"Listing files in directory {directory} of sandbox {sandbox_id}")
+        files = sandbox.files.list(directory, depth=25)
+        logger.info(
+            f"Found {len(files)} files in directory {directory} of sandbox {sandbox_id}"
+        )
+        return files
 
     def destroy_all_sandboxes(self):
         """Destroy all sandboxes."""
@@ -175,4 +201,5 @@ class ExecutorService:
         for sandbox in self.sandboxes.values():
             sandbox.kill()
         self.sandboxes.clear()
+        self.contexts.clear()
         logger.info("All sandboxes destroyed")

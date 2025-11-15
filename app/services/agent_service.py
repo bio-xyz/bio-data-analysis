@@ -41,36 +41,37 @@ class AgentService:
 
         sandbox_id = self.executor_service.create_sandbox()
 
-        uploaded_files = await self.executor_service.upload_data_files(
-            sandbox_id, data_files
-        )
+        try:
+            uploaded_files = await self.executor_service.upload_data_files(
+                sandbox_id, data_files
+            )
 
-        generated_code = self.llm_code_generator.generate_code(
-            task_description=task.task_description,
-            data_files_description=task.data_files_description,
-            uploaded_files=uploaded_files,
-        )
-        logger.debug(f"Generated code: {generated_code}")
+            generated_code = self.llm_code_generator.generate_code(
+                task_description=task.task_description,
+                data_files_description=task.data_files_description,
+                uploaded_files=uploaded_files,
+            )
+            logger.debug(f"Generated code: {generated_code}")
 
-        logger.info("Executing generated code in sandbox...")
-        execution_result = self.executor_service.execute_code(
-            sandbox_id, generated_code
-        )
-        logger.debug(f"Execution result: {execution_result}")
+            logger.info("Executing generated code in sandbox...")
+            execution_result = self.executor_service.execute_code(
+                sandbox_id, generated_code
+            )
+            logger.debug(f"Execution result: {execution_result}")
 
-        task_response = self.llm_response_generator.generate_task_response(
-            task_description=task.task_description,
-            generated_code=generated_code,
-            execution_result=execution_result,
-        )
+            task_response = self.llm_response_generator.generate_task_response(
+                task_description=task.task_description,
+                generated_code=generated_code,
+                execution_result=execution_result,
+            )
 
-        for artifact in task_response.artifacts:
-            if artifact.path:
-                artifact.content = base64.b64encode(
-                    self.executor_service.download_file(sandbox_id, artifact.path)
-                ).decode("utf-8")
-
-        self.executor_service.destroy_sandbox(sandbox_id)
+            for artifact in task_response.artifacts:
+                if artifact.path:
+                    artifact.content = base64.b64encode(
+                        self.executor_service.download_file(sandbox_id, artifact.path)
+                    ).decode("utf-8")
+        finally:
+            self.executor_service.destroy_sandbox(sandbox_id)
 
         logger.info(f"Task processing completed for sandbox {sandbox_id}")
 
