@@ -21,6 +21,12 @@ class Settings:
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     ANTHROPIC_CUSTOM_BASE_URL: Optional[str] = os.getenv("ANTHROPIC_CUSTOM_BASE_URL")
 
+    # Plan Generation LLM Config
+    PLAN_GENERATION_LLM: LLMConfig = LLMConfig(
+        provider=os.getenv("PLAN_GENERATION_PROVIDER", "openai"),
+        model_name=os.getenv("PLAN_GENERATION_MODEL", "gpt-5"),
+    )
+
     # Code Generation LLM Config
     CODE_GENERATION_LLM: LLMConfig = LLMConfig(
         provider=os.getenv("CODE_GENERATION_PROVIDER", "openai"),

@@ -7,11 +7,13 @@ from e2b_code_interpreter.models import serialize_results
 
 from app.config import get_logger, settings
 from app.models.llm_config import LLMConfig
-from app.models.task import AnswerResponse, ArtifactResponse, TaskResponse
+from app.models.task import AnswerResponse, ArtifactResponse, Plan, TaskResponse
 from app.prompts import (
     build_code_generation_prompt,
+    build_plan_generation_prompt,
     build_task_response_prompt,
     get_code_generation_system_prompt,
+    get_plan_generation_system_prompt,
     get_task_response_system_prompt,
 )
 from app.services.llm.anthropic_service import AnthropicService
@@ -92,6 +94,7 @@ class LLMService:
         task_description: str,
         data_files_description: str | None = None,
         uploaded_files: list[str] | None = None,
+        plan: Plan | None = None,
     ) -> str:
         """
         Generate Python code based on the task description and optional data files.
@@ -100,11 +103,32 @@ class LLMService:
             task_description: Description of the task to accomplish
             data_files_description: Optional description of the data files
             uploaded_files: Optional list of uploaded file names
+            plan: Optional plan to follow when generating code
 
         Returns:
             str: The generated Python code
         """
         logger.info("Generating code for task...")
+
+        # Format plan as string if provided
+        plan_str = None
+        if plan:
+            plan_parts = [f"Goal: {plan.goal}"]
+            if plan.available_resources:
+                plan_parts.append(
+                    f"Available Resources: {', '.join(plan.available_resources)}"
+                )
+            plan_parts.append("\nSteps:")
+            for step in plan.steps:
+                plan_parts.append(f"\n{step.step_number}. {step.title}")
+                plan_parts.append(f"   {step.description}")
+                if step.expected_output:
+                    plan_parts.append(f"   Expected output: {step.expected_output}")
+            if plan.expected_artifacts:
+                plan_parts.append(
+                    f"\nExpected Artifacts: {', '.join(plan.expected_artifacts)}"
+                )
+            plan_str = "\n".join(plan_parts)
 
         # Build the prompt
         system_prompt = get_code_generation_system_prompt()
@@ -112,6 +136,7 @@ class LLMService:
             task_description=task_description,
             data_files_description=data_files_description,
             uploaded_files=uploaded_files,
+            plan=plan_str,
         )
 
         # Prepare messages
@@ -125,6 +150,61 @@ class LLMService:
 
         logger.info(f"Generated code length: {len(generated_code)} characters")
         return generated_code
+
+    def generate_plan(
+        self,
+        task_description: str,
+        data_files_description: str | None = None,
+        uploaded_files: list[str] | None = None,
+    ) -> Plan:
+        """
+        Generate a step-by-step plan for accomplishing the task.
+
+        Args:
+            task_description: Description of the task to accomplish
+            data_files_description: Optional description of the data files
+            uploaded_files: Optional list of uploaded file names
+
+        Returns:
+            Plan: The generated plan object
+        """
+        logger.info("Generating plan for task...")
+
+        # Build the prompt
+        system_prompt = get_plan_generation_system_prompt()
+        user_prompt = build_plan_generation_prompt(
+            task_description=task_description,
+            data_files_description=data_files_description,
+            uploaded_files=uploaded_files,
+        )
+
+        # Prepare messages
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # Generate plan using the LLM
+        plan_text = self._generate_response(messages=messages)
+
+        logger.debug(f"Generated plan text: {plan_text}")
+
+        # Parse JSON response
+        try:
+            plan_data = json.loads(plan_text)
+            plan = Plan(**plan_data)
+            logger.info(f"Generated plan with {len(plan.steps)} steps")
+            return plan
+        except (json.JSONDecodeError, Exception) as e:
+            logger.error(f"Failed to parse plan response: {e}")
+            logger.error(f"Plan text: {plan_text}")
+            # Return a fallback plan
+            return Plan(
+                goal=task_description,
+                available_resources=uploaded_files or [],
+                steps=[],
+                expected_artifacts=[],
+            )
 
     def generate_task_response(
         self,

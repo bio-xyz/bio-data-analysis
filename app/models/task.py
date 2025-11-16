@@ -2,6 +2,44 @@ from fastapi import Form
 from pydantic import BaseModel, Field, field_validator
 
 
+class PlanStep(BaseModel):
+    step_number: int = Field(
+        ...,
+        description="The sequential number of the step in the plan",
+    )
+    title: str = Field(
+        ...,
+        description="Brief title describing what this step accomplishes",
+    )
+    description: str = Field(
+        ...,
+        description="Detailed description of what needs to be done in this step",
+    )
+    expected_output: str = Field(
+        "",
+        description="What should be produced or achieved in this step",
+    )
+
+
+class Plan(BaseModel):
+    goal: str = Field(
+        ...,
+        description="Brief description of the overall goal",
+    )
+    available_resources: list[str] = Field(
+        [],
+        description="List of available data files and their descriptions",
+    )
+    steps: list[PlanStep] = Field(
+        [],
+        description="Sequential steps to accomplish the task",
+    )
+    expected_artifacts: list[str] = Field(
+        [],
+        description="List of expected outputs like plots, tables, reports, etc.",
+    )
+
+
 class TaskRequest(BaseModel):
     task_description: str = Field(
         ...,
@@ -71,6 +109,10 @@ class ArtifactResponse(BaseModel):
 
 
 class TaskResponse(BaseModel):
+    plan: Plan | None = Field(
+        None,
+        description="The step-by-step plan created to accomplish the task",
+    )
     answer: AnswerResponse = Field(
         {},
         description="The agent's answer to the task, including summary and details",

@@ -20,6 +20,7 @@ def build_code_generation_prompt(
     task_description: str,
     data_files_description: str | None = None,
     uploaded_files: list[str] | None = None,
+    plan: str | None = None,
 ) -> str:
     """
     Build the user prompt for code generation.
@@ -28,6 +29,7 @@ def build_code_generation_prompt(
         task_description: Description of the task to accomplish
         data_files_description: Optional description of the data files
         uploaded_files: Optional list of uploaded file names
+        plan: Optional step-by-step plan to follow
 
     Returns:
         str: The formatted user prompt
@@ -40,8 +42,11 @@ def build_code_generation_prompt(
     if data_files_description:
         prompt_parts.append(f"\nData files description: {data_files_description}")
 
+    if plan:
+        prompt_parts.append(f"\n\nPlan to follow:\n{plan}")
+
     prompt_parts.append(
-        "\n\nGenerate Python code to accomplish this task. Return only the executable Python code without any markdown formatting or explanations."
+        "\n\nGenerate Python code to accomplish this task following the plan. Return only the executable Python code without any markdown formatting or explanations."
     )
 
     return "\n".join(prompt_parts)

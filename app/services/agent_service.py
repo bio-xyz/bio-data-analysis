@@ -15,6 +15,7 @@ class AgentService:
 
     def __init__(self):
         self.executor_service = ExecutorService()
+        self.llm_planner = LLMService(llm_config=settings.PLAN_GENERATION_LLM)
         self.llm_code_generator = LLMService(llm_config=settings.CODE_GENERATION_LLM)
         self.llm_response_generator = LLMService(
             llm_config=settings.RESPONSE_GENERATION_LLM
@@ -44,24 +45,43 @@ class AgentService:
                 sandbox_id, data_files
             )
 
-            generated_code = self.llm_code_generator.generate_code(
+            # Step 1: Generate a plan
+            logger.info("Step 1: Generating plan...")
+            plan = self.llm_planner.generate_plan(
                 task_description=task.task_description,
                 data_files_description=task.data_files_description,
                 uploaded_files=uploaded_files,
             )
+            logger.info(f"Plan generated with {len(plan.steps)} steps")
+            logger.debug(f"Plan: {plan}")
+
+            # Step 2: Generate code based on the plan
+            logger.info("Step 2: Generating code based on plan...")
+            generated_code = self.llm_code_generator.generate_code(
+                task_description=task.task_description,
+                data_files_description=task.data_files_description,
+                uploaded_files=uploaded_files,
+                plan=plan,
+            )
             logger.debug(f"Generated code: {generated_code}")
 
-            logger.info("Executing generated code in sandbox...")
+            # Step 3: Execute the code
+            logger.info("Step 3: Executing generated code in sandbox...")
             execution_result = self.executor_service.execute_code(
                 sandbox_id, generated_code
             )
             logger.debug(f"Execution result: {execution_result}")
 
+            # Step 4: Generate response
+            logger.info("Step 4: Generating task response...")
             task_response = self.llm_response_generator.generate_task_response(
                 task_description=task.task_description,
                 generated_code=generated_code,
                 execution_result=execution_result,
             )
+
+            # Add the plan to the response
+            task_response.plan = plan
 
             for artifact in task_response.artifacts:
                 if artifact.path:
