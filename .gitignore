@@ -11,3 +11,6 @@ wheels/
 
 # Environment variables file
 .env
+
+# Ignore Test UI folder on main branch
+ui/
