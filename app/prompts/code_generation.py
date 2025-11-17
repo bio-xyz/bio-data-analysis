@@ -13,6 +13,8 @@ Guidelines:
 - If data files are provided, assume they are available in the current directory
 - Output should be complete and executable code
 - Do not include markdown formatting or code fences - return only the Python code
+- If previous code failed with an error, analyze the error and fix the issue in the new code
+- Common fixes: add missing imports, correct variable names, fix syntax errors, handle edge cases
 """
 
 
@@ -21,6 +23,8 @@ def build_code_generation_prompt(
     data_files_description: str | None = None,
     uploaded_files: list[str] | None = None,
     plan: str | None = None,
+    previous_code: str | None = None,
+    previous_error: str | None = None,
 ) -> str:
     """
     Build the user prompt for code generation.
@@ -30,6 +34,8 @@ def build_code_generation_prompt(
         data_files_description: Optional description of the data files
         uploaded_files: Optional list of uploaded file names
         plan: Optional step-by-step plan to follow
+        previous_code: Optional previous code that failed
+        previous_error: Optional error message from previous execution
 
     Returns:
         str: The formatted user prompt
@@ -44,6 +50,13 @@ def build_code_generation_prompt(
 
     if plan:
         prompt_parts.append(f"\n\nPlan to follow:\n{plan}")
+
+    # Add error context if this is a retry
+    if previous_code and previous_error:
+        prompt_parts.append("\n\CRITICAL: PREVIOUS ATTEMPT FAILED")
+        prompt_parts.append(f"\nPrevious code:\n```python\n{previous_code}\n```")
+        prompt_parts.append(f"\nError encountered:\n{previous_error}")
+        prompt_parts.append("\nPlease fix the error and generate corrected code.")
 
     prompt_parts.append(
         "\n\nGenerate Python code to accomplish this task following the plan. Return only the executable Python code without any markdown formatting or explanations."

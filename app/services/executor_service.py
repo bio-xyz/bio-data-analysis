@@ -5,11 +5,14 @@ from e2b_code_interpreter import Context, EntryInfo, Execution, Sandbox
 from fastapi import UploadFile
 
 from app.config import get_logger, settings
+from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
 
 
-class ExecutorService:
+class ExecutorService(metaclass=SingletonMeta):
+    """Singleton service to manage E2B sandboxes and code execution."""
+
     def __init__(self):
         self.sandboxes: Dict[str, Sandbox] = {}
         self.contexts: Dict[str, Context] = {}

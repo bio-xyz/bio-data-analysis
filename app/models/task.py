@@ -121,3 +121,7 @@ class TaskResponse(BaseModel):
         [],
         description="List of artifacts generated during task execution, such as images or tables",
     )
+    success: bool = Field(
+        True,
+        description="Flag indicating whether the task execution was successful",
+    )

@@ -95,6 +95,8 @@ class LLMService:
         data_files_description: str | None = None,
         uploaded_files: list[str] | None = None,
         plan: Plan | None = None,
+        previous_code: str | None = None,
+        previous_error: str | None = None,
     ) -> str:
         """
         Generate Python code based on the task description and optional data files.
@@ -104,6 +106,8 @@ class LLMService:
             data_files_description: Optional description of the data files
             uploaded_files: Optional list of uploaded file names
             plan: Optional plan to follow when generating code
+            previous_code: Optional previous code that failed (for regeneration)
+            previous_error: Optional error message from previous execution (for regeneration)
 
         Returns:
             str: The generated Python code
@@ -137,6 +141,8 @@ class LLMService:
             data_files_description=data_files_description,
             uploaded_files=uploaded_files,
             plan=plan_str,
+            previous_code=previous_code,
+            previous_error=previous_error,
         )
 
         # Prepare messages
@@ -211,6 +217,8 @@ class LLMService:
         task_description: str,
         generated_code: str,
         execution_result: Execution,
+        has_execution_error: bool = False,
+        execution_error: Optional[str] = None,
     ) -> TaskResponse:
         """
         Generate a response summarizing the task, code, and execution result.
@@ -219,6 +227,8 @@ class LLMService:
             task_description: Description of the task
             generated_code: The code that was generated
             execution_result: The result of executing the code
+            has_execution_error: Flag indicating whether there was an execution error
+            execution_error: Error message if execution failed
         Returns:
             TaskResponse: The response object containing the summary
         """
@@ -254,6 +264,8 @@ class LLMService:
             task_description=task_description,
             generated_code=generated_code,
             execution_json=execution_json,
+            has_execution_error=has_execution_error,
+            execution_error=execution_error,
         )
 
         # Prepare messages
@@ -305,4 +317,8 @@ class LLMService:
 
         logger.info(f"Generated response with {len(artifacts)} artifacts")
 
-        return TaskResponse(answer=answer, artifacts=artifacts)
+        return TaskResponse(
+            answer=answer,
+            artifacts=artifacts,
+            success=not has_execution_error,
+        )

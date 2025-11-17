@@ -8,6 +8,7 @@ dependencies = [
     "anthropic>=0.72.1",
     "e2b-code-interpreter>=2.3.0",
     "fastapi>=0.121.1",
+    "langgraph>=1.0.3",
     "openai>=2.8.0",
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.20",

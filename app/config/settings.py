@@ -50,5 +50,10 @@ class Settings:
     )
     DEFAULT_DATA_DIRECTORY: str = os.getenv("DEFAULT_DATA_DIRECTORY", "/home/user/data")
 
+    # Agent Configuration
+    CODE_GENERATION_MAX_RETRIES: int = int(
+        os.getenv("CODE_GENERATION_MAX_RETRIES", "3")
+    )
+
 
 settings = Settings()
