@@ -75,6 +75,36 @@ uv run uvicorn app.main:app --reload
 
 The API will be available at `http://localhost:8000`
 
+## Demo UI (Next.js + Radix + Tailwind)
+
+A lightweight demo lives in `ui/`. It mirrors the `TaskRequest` contract and lets you:
+
+- enter the mandatory task description
+- upload and remove multiple files before submitting
+- provide the optional file description block
+- inspect the returned `plan`, `answer`, and `artifacts` sections from the API response
+
+### Configure the UI
+
+1. Install Node.js 18+.
+2. Copy the sample environment configuration:
+
+```bash
+cp ui/.env.local.example ui/.env.local # edit if you need a different backend origin
+```
+
+Set `NEXT_PUBLIC_AGENT_API_BASE` inside `.env.local` (defaults to `http://localhost:8000/api`).
+
+### Run the UI alongside FastAPI
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+Visit `http://localhost:3000` and use the form. Submissions are posted to `POST /api/agent/run` with the same multipart payload as the cURL example below.
+
 ## API Documentation
 
 Once the server is running, visit:
