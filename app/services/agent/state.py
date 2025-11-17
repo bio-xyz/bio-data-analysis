@@ -39,11 +39,11 @@ class AgentState(MessagesState):
     execution_result: Any = Field(
         default=None, description="Result from code execution"
     )
-    execution_error: str | None = Field(
-        default=None, description="Error message if execution failed"
+    error: str | None = Field(
+        default=None, description="Error message from plan generation or execution"
     )
-    has_execution_error: bool = Field(
-        default=False, description="Whether execution had errors"
+    success: bool = Field(
+        default=True, description="Whether the operation was successful (plan or execution)"
     )
 
     # Final response

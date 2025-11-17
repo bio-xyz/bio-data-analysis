@@ -12,6 +12,7 @@ class ActionSignal(str, Enum):
     """
 
     PLAN_COMPLETE = "plan_complete"
+    PLAN_ERROR = "plan_error"
     CODE_GENERATED = "code_generated"
     EXECUTION_SUCCESS = "execution_success"
     EXECUTION_ERROR = "execution_error"

@@ -6,15 +6,17 @@ Graph Flow:
       ↓
     [plan]  ───────────→  Generate execution plan
       ↓
-    [code_generation]  ──→  Generate Python code
-      ↓
-    [execution]  ────────→  Execute code in sandbox
-      ↓
-      ├─ SUCCESS ────────→  [analyze]  ──→  Generate response  ──→  END
+      ├─ SUCCESS ────────→  [code_generation]  ──→  Generate Python code
+      │                                                  ↓
+      │                                            [execution]  ────────→  Execute code in sandbox
+      │                                                  ↓
+      │                                            ├─ SUCCESS ────────→  [analyze]  ──→  END
+      │                                            │
+      │                                            └─ ERROR ──────────→  [code_generation]  (retry)
+      │                                                                   ↓ (if max_retries reached)
+      │                                                                   [analyze]  ──→  END
       │
-      └─ ERROR ──────────→  [code_generation]  (retry with error context)
-                            ↓ (if max_retries reached)
-                            [analyze]  ──→  Generate response with error  ──→  END
+      └─ ERROR (missing data) ───→  [analyze]  ──→  Generate error response  ──→  END
 
 """
 
@@ -30,7 +32,10 @@ from app.services.agent.nodes import (
     plan_node,
 )
 from app.services.agent.state import AgentState
-from app.services.agent.transitions import should_regenerate_code
+from app.services.agent.transitions import (
+    should_continue_after_plan,
+    should_regenerate_code,
+)
 from app.utils.singleton import SingletonMeta
 
 logger = get_logger(__name__)
@@ -69,8 +74,15 @@ class AgentGraph(metaclass=SingletonMeta):
         workflow.set_entry_point(AgentNode.PLAN)
 
         # Add edges
-        # Plan -> Code Generation (always)
-        workflow.add_edge(AgentNode.PLAN, AgentNode.CODE_GENERATION)
+        # Plan -> Code Generation (if success) OR Analyze (if error/missing data)
+        workflow.add_conditional_edges(
+            AgentNode.PLAN,
+            should_continue_after_plan,
+            {
+                AgentNode.CODE_GENERATION: AgentNode.CODE_GENERATION,  # Plan success
+                AgentNode.ANALYZE: AgentNode.ANALYZE,  # Plan error (e.g., missing data)
+            },
+        )
 
         # Code Generation -> Execution (always)
         workflow.add_edge(AgentNode.CODE_GENERATION, AgentNode.EXECUTION)

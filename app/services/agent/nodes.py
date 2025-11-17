@@ -40,6 +40,16 @@ def plan_node(state: AgentState) -> dict:
         uploaded_files=state["uploaded_files"],
     )
 
+    # Check if plan generation was successful
+    if not plan.success:
+        logger.warning(f"Plan generation failed: {plan.error}")
+        return {
+            "plan": plan,
+            "error": plan.error,
+            "success": False,
+            "action_signal": ActionSignal.PLAN_ERROR,
+        }
+
     logger.info(f"Plan generated with {len(plan.steps)} steps")
 
     return {
@@ -63,20 +73,20 @@ def code_generation_node(state: AgentState) -> dict:
     llm_code_generator = LLMService(llm_config=settings.CODE_GENERATION_LLM)
 
     # Build context for code generation (include error if regenerating)
-    has_execution_error = state.get("has_execution_error", False)
-    execution_error = state.get("execution_error")
+    success = state.get("success", True)
+    error = state.get("error")
     previous_code = state.get("generated_code")
 
-    if has_execution_error and execution_error:
-        logger.info(f"Regenerating code due to previous error: {execution_error}")
+    if not success and error:
+        logger.info(f"Regenerating code due to previous error: {error}")
 
     generated_code = llm_code_generator.generate_code(
         task_description=state["task_description"],
         data_files_description=state["data_files_description"],
         uploaded_files=state["uploaded_files"],
         plan=state["plan"],
-        previous_code=previous_code if has_execution_error else None,
-        previous_error=execution_error if has_execution_error else None,
+        previous_code=previous_code if not success else None,
+        previous_error=error if not success else None,
     )
 
     attempts = state.get("code_generation_attempts", 0) + 1
@@ -114,24 +124,24 @@ def execution_node(state: AgentState) -> dict:
             logger.warning(f"Execution error: {execution_result.error}")
             return {
                 "execution_result": execution_result,
-                "execution_error": str(execution_result.error),
-                "has_execution_error": True,
+                "error": str(execution_result.error),
+                "success": False,
                 "action_signal": ActionSignal.EXECUTION_ERROR,
             }
 
         logger.info("Code executed successfully")
         return {
             "execution_result": execution_result,
-            "execution_error": None,
-            "has_execution_error": False,
+            "error": None,
+            "success": True,
             "action_signal": ActionSignal.EXECUTION_SUCCESS,
         }
 
     except Exception as e:
         logger.error(f"Execution node exception: {e}")
         return {
-            "execution_error": str(e),
-            "has_execution_error": True,
+            "error": str(e),
+            "success": False,
             "action_signal": ActionSignal.EXECUTION_ERROR,
         }
 
@@ -160,10 +170,10 @@ def analyze_node(state: AgentState) -> dict:
 
     task_response = llm_response_generator.generate_task_response(
         task_description=state["task_description"],
-        generated_code=state["generated_code"],
+        generated_code=state.get("generated_code", ""),
         execution_result=execution_result,
-        has_execution_error=state.get("has_execution_error", False),
-        execution_error=state.get("execution_error"),
+        success=state.get("success", True),
+        error=state.get("error"),
     )
 
     # Add plan to response

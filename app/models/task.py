@@ -22,8 +22,12 @@ class PlanStep(BaseModel):
 
 
 class Plan(BaseModel):
+    success: bool = Field(
+        True,
+        description="Flag indicating whether the plan can be created with available resources",
+    )
     goal: str = Field(
-        ...,
+        "",
         description="Brief description of the overall goal",
     )
     available_resources: list[str] = Field(
@@ -37,6 +41,10 @@ class Plan(BaseModel):
     expected_artifacts: list[str] = Field(
         [],
         description="List of expected outputs like plots, tables, reports, etc.",
+    )
+    error: str = Field(
+        "",
+        description="Error message if success=false, explaining what resources are missing",
     )
 
 

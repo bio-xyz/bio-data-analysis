@@ -83,8 +83,8 @@ def build_task_response_prompt(
     task_description: str,
     generated_code: str,
     execution_json: str,
-    has_execution_error: bool = False,
-    execution_error: str | None = None,
+    success: bool = True,
+    error: str | None = None,
 ) -> str:
     """
     Build the user prompt for task response generation.
@@ -93,20 +93,19 @@ def build_task_response_prompt(
         task_description: Description of the original task
         generated_code: The code that was generated and executed
         execution_json: JSON string from Execution.to_json() containing logs, artifacts, and errors
-        has_execution_error: Flag indicating whether there was an execution error
-        execution_error: Error message if execution failed
+        success: Flag indicating whether the operation was successful (plan or execution)
+        error: Error message if planning or execution failed
 
     Returns:
         str: The formatted user prompt
     """
     prompt_parts = [f"Original Task: {task_description}"]
 
-    if has_execution_error and execution_error:
-        prompt_parts.append(
-            f"\n\nWARNING - EXECUTION ERROR OCCURRED:\n{execution_error}"
-        )
+    if not success and error:
+        prompt_parts.append(f"\n\nWARNING - ERROR OCCURRED:\n{error}")
 
-    prompt_parts.append(f"\n\nGenerated Code:\n```python\n{generated_code}\n```")
+    if generated_code:
+        prompt_parts.append(f"\n\nGenerated Code:\n```python\n{generated_code}\n```")
 
     prompt_parts.append(f"\n\nExecution Result:\n```json\n{execution_json}\n```")
 

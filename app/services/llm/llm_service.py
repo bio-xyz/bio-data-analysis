@@ -216,9 +216,9 @@ class LLMService:
         self,
         task_description: str,
         generated_code: str,
-        execution_result: Execution,
-        has_execution_error: bool = False,
-        execution_error: Optional[str] = None,
+        execution_result: Optional[Execution],
+        success: bool = True,
+        error: Optional[str] = None,
     ) -> TaskResponse:
         """
         Generate a response summarizing the task, code, and execution result.
@@ -227,15 +227,21 @@ class LLMService:
             task_description: Description of the task
             generated_code: The code that was generated
             execution_result: The result of executing the code
-            has_execution_error: Flag indicating whether there was an execution error
-            execution_error: Error message if execution failed
+            success: Flag indicating whether the operation was successful (plan or execution)
+            error: Error message if planning or execution failed
         Returns:
             TaskResponse: The response object containing the summary
         """
 
         logger.info("Generating task response...")
 
-        execution_dictionary = {
+        if not execution_result:
+            logger.info(
+                "No execution result provided - creating empty Execution object"
+            )
+            execution_result = Execution()
+
+        parsed_execution = {
             "artifacts": [],
             "logs": execution_result.logs.to_json(),
             "error": execution_result.to_json() if execution_result.error else None,
@@ -252,20 +258,16 @@ class LLMService:
             # Remove chart elements to reduce prompt size
             if "chart" in result and "elements" in result["chart"]:
                 result["chart"]["elements"] = " --- IGNORE --- "
-            execution_dictionary["artifacts"].append(result)
-
-        execution_json = json.dumps(execution_dictionary)
-
-        logger.debug(f"Execution JSON: {execution_json}")
+            parsed_execution["artifacts"].append(result)
 
         # Build the prompt
         system_prompt = get_task_response_system_prompt()
         user_prompt = build_task_response_prompt(
             task_description=task_description,
             generated_code=generated_code,
-            execution_json=execution_json,
-            has_execution_error=has_execution_error,
-            execution_error=execution_error,
+            execution_json=json.dumps(parsed_execution),
+            success=success,
+            error=error,
         )
 
         # Prepare messages
@@ -320,5 +322,5 @@ class LLMService:
         return TaskResponse(
             answer=answer,
             artifacts=artifacts,
-            success=not has_execution_error,
+            success=success,
         )
