@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_logger, setup_logging
-from app.routers import agent_router
+from app.routers import task_router
 
 load_dotenv()
 setup_logging()
@@ -41,7 +41,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(agent_router.router, prefix="/api", tags=["agent"])
+app.include_router(task_router.router, prefix="/api", tags=["task"])
 
 
 @app.get("/health")

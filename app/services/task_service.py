@@ -12,7 +12,7 @@ from app.utils import SingletonMeta
 logger = get_logger(__name__)
 
 
-class AgentService(metaclass=SingletonMeta):
+class TaskService(metaclass=SingletonMeta):
     """Singleton service to handle agent operations using LangGraph."""
 
     def __init__(self):

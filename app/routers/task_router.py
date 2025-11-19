@@ -3,14 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.models.task import TaskRequest, TaskResponse
-from app.services.agent_service import AgentService
+from app.services.task_service import TaskService
 
 router = APIRouter()
-agent_service = AgentService()
+task_service = TaskService()
 
 
 @router.post(
-    "/agent/run", summary="Run agent with code interpreter", response_model=TaskResponse
+    "/task/run", summary="Run agent with code interpreter", response_model=TaskResponse
 )
 async def run_agent_with_code_interpreter(
     task: Annotated[TaskRequest, Depends(TaskRequest.as_form)],
@@ -27,4 +27,4 @@ async def run_agent_with_code_interpreter(
         dict: The result of the agent's execution.
     """
 
-    return await agent_service.process_task(task, data_files)
+    return await task_service.process_task(task, data_files)
