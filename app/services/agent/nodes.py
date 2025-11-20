@@ -7,6 +7,7 @@ from app.services.agent.signals import ActionSignal
 from app.services.agent.state import AgentState
 from app.services.executor_service import ExecutorService
 from app.services.llm import LLMService
+from app.utils.nb_builder import NotebookBuilder
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,22 @@ class AgentNode(str, Enum):
     CODE_GENERATION = "code_generation"
     EXECUTION = "execution"
     ANALYZE = "analyze"
+
+
+def _cleanup_context(
+    executor_service: ExecutorService, sandbox_id: str, nb_builder: NotebookBuilder
+) -> None:
+    """
+    Recreate sandbox context and clear notebook builder.
+
+    Args:
+        executor_service: Executor service instance
+        sandbox_id: Sandbox identifier
+        nb_builder: Notebook builder instance
+    """
+    executor_service.create_context(sandbox_id)
+    nb_builder.clear()
+    logger.info(f"Recreated context for sandbox {sandbox_id}")
 
 
 def plan_node(state: AgentState) -> dict:
@@ -113,37 +130,48 @@ def execution_node(state: AgentState) -> dict:
 
     executor_service = ExecutorService()
     sandbox_id = state["sandbox_id"]
+    nb_builder = state.get("notebook_builder", NotebookBuilder())
+    generated_code = state.get("generated_code", "")
+
+    # Add the generated code as a code cell
+    nb_builder.add_code(generated_code)
 
     try:
-        execution_result = executor_service.execute_code(
-            sandbox_id, state["generated_code"]
-        )
-
-        # Check if execution had errors
-        if execution_result.error is not None:
-            logger.warning(f"Execution error: {execution_result.error}")
-            return {
-                "execution_result": execution_result,
-                "error": str(execution_result.error),
-                "success": False,
-                "action_signal": ActionSignal.EXECUTION_ERROR,
-            }
-
-        logger.info("Code executed successfully")
-        return {
-            "execution_result": execution_result,
-            "error": None,
-            "success": True,
-            "action_signal": ActionSignal.EXECUTION_SUCCESS,
-        }
-
+        execution_result = executor_service.execute_code(sandbox_id, generated_code)
     except Exception as e:
-        logger.error(f"Execution node exception: {e}")
+        logger.error(f"Execution failed with exception: {e}")
+        _cleanup_context(executor_service, sandbox_id, nb_builder)
         return {
-            "error": str(e),
+            "execution_result": None,
+            "error": f"Execution failed: {str(e)}",
             "success": False,
             "action_signal": ActionSignal.EXECUTION_ERROR,
+            "notebook_builder": nb_builder,
         }
+
+    # Attach execution outputs to the notebook builder
+    nb_builder.add_execution(execution_result)
+
+    # Check if execution had errors
+    if execution_result.error is not None:
+        logger.warning(f"Execution error: {execution_result.error}")
+        _cleanup_context(executor_service, sandbox_id, nb_builder)
+        return {
+            "execution_result": execution_result,
+            "error": str(execution_result.error),
+            "success": False,
+            "action_signal": ActionSignal.EXECUTION_ERROR,
+            "notebook_builder": nb_builder,
+        }
+
+    logger.info("Code executed successfully")
+    return {
+        "execution_result": execution_result,
+        "error": None,
+        "success": True,
+        "action_signal": ActionSignal.EXECUTION_SUCCESS,
+        "notebook_builder": nb_builder,
+    }
 
 
 def analyze_node(state: AgentState) -> dict:

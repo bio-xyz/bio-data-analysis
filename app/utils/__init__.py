@@ -1,5 +1,6 @@
 """Utility modules for the application."""
 
-from .singleton import SingletonMeta
+from app.utils.nb_builder import NotebookBuilder
+from app.utils.singleton import SingletonMeta
 
-__all__ = ["SingletonMeta"]
+__all__ = ["SingletonMeta", "NotebookBuilder"]

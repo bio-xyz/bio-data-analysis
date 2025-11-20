@@ -8,6 +8,7 @@ from app.models.task import TaskRequest, TaskResponse
 from app.services.agent import AgentGraph, AgentState
 from app.services.executor_service import ExecutorService
 from app.utils import SingletonMeta
+from app.utils.nb_builder import NotebookBuilder
 
 logger = get_logger(__name__)
 
@@ -56,6 +57,7 @@ class TaskService(metaclass=SingletonMeta):
                 uploaded_files=uploaded_files,
                 sandbox_id=sandbox_id,
                 max_retries=3,
+                notebook_builder=NotebookBuilder(),
             )
 
             logger.info("Starting LangGraph execution...")

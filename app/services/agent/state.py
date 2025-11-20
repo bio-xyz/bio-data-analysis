@@ -7,6 +7,7 @@ from pydantic import Field
 
 from app.config import settings
 from app.models.task import Plan, TaskResponse
+from app.utils.nb_builder import NotebookBuilder
 
 
 class AgentState(MessagesState):
@@ -43,11 +44,18 @@ class AgentState(MessagesState):
         default=None, description="Error message from plan generation or execution"
     )
     success: bool = Field(
-        default=True, description="Whether the operation was successful (plan or execution)"
+        default=True,
+        description="Whether the operation was successful (plan or execution)",
     )
 
     # Final response
     task_response: TaskResponse = Field(default=None, description="Final task response")
+
+    # Notebook builder to record code cells and execution outputs
+    notebook_builder: NotebookBuilder = Field(
+        default_factory=NotebookBuilder,
+        description="NotebookBuilder instance capturing execution",
+    )
 
     # Agent control
     action_signal: str = Field(default="continue", description="Signal for next action")
