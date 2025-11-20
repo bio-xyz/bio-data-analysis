@@ -2,10 +2,10 @@ import os
 from typing import Dict, List
 
 from e2b_code_interpreter import Context, EntryInfo, Execution, Sandbox
-from fastapi import UploadFile
 
 from app.config import get_logger, settings
 from app.utils import SingletonMeta
+from app.utils.datafile import DataFile
 
 logger = get_logger(__name__)
 
@@ -99,10 +99,10 @@ class ExecutorService(metaclass=SingletonMeta):
 
         return output
 
-    async def upload_data_files(
+    def upload_data_files(
         self,
         sandbox_id: str,
-        data_files: List[UploadFile],
+        data_files: List[DataFile],
         target_folder: str = settings.DEFAULT_DATA_DIRECTORY,
     ) -> List[str]:
         """
@@ -110,7 +110,7 @@ class ExecutorService(metaclass=SingletonMeta):
 
         Args:
             sandbox_id: Unique identifier for the sandbox
-            data_files: List of UploadFile objects to upload
+            data_files: List of DataFile objects to upload
             target_folder: Target folder in sandbox (default: /home/user/data)
 
         Returns:
@@ -125,20 +125,16 @@ class ExecutorService(metaclass=SingletonMeta):
         sandbox.files.make_dir(target_folder)
 
         uploaded_files = []
-        for upload_file in data_files:
-            filename = upload_file.filename
+        for data_file in data_files:
+            filename = data_file.filename
             target_path = f"{target_folder}/{filename}"
 
-            # Read file content from UploadFile
-            content = await upload_file.read()
-
-            # Upload to sandbox
-            sandbox.files.write(target_path, content)
-            uploaded_files.append(target_path)
-            logger.info(f"Uploaded file: {filename} to {target_path}")
-
-            # Reset file pointer for potential reuse
-            await upload_file.seek(0)
+            # Upload to sandbox using bytes content from DataFile
+            write_info = sandbox.files.write(target_path, data_file.content)
+            uploaded_files.append(write_info.path)
+            logger.info(
+                f"Uploaded file: {filename} to {target_path} (size: {data_file.size} bytes)"
+            )
 
         logger.info(f"Successfully uploaded {len(uploaded_files)} files")
         return uploaded_files

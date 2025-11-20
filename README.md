@@ -109,7 +109,7 @@ example/             # Example tasks and data files
 Submit a data analysis task with the dose-response example:
 
 ```bash
-curl --location 'http://localhost:8000/api/task/run' \
+curl --location 'http://localhost:8000/api/task/run/sync' \
   --form 'data_files=@"example/dose_response.csv"' \
   --form 'task_description="Given this CSV of drug concentrations and viability, fit a 4-parameter logistic curve, estimate IC50, and show the curve."'
 ```

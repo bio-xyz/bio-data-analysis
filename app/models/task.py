@@ -1,5 +1,13 @@
+from enum import Enum
+
 from fastapi import Form
 from pydantic import BaseModel, Field, field_validator
+
+
+class TaskStatus(str, Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class PlanStep(BaseModel):
@@ -117,6 +125,14 @@ class ArtifactResponse(BaseModel):
 
 
 class TaskResponse(BaseModel):
+    id: str | None = Field(
+        None,
+        description="Unique identifier for the task",
+    )
+    status: TaskStatus | None = Field(
+        None,
+        description="Current status of the task",
+    )
     plan: Plan | None = Field(
         None,
         description="The step-by-step plan created to accomplish the task",
@@ -133,3 +149,27 @@ class TaskResponse(BaseModel):
         True,
         description="Flag indicating whether the task execution was successful",
     )
+
+
+class TaskStatusResponse(BaseModel):
+    id: str = Field(
+        ...,
+        description="Unique identifier for the submitted task",
+    )
+    status: TaskStatus = Field(
+        ...,
+        description="Current status of the task",
+    )
+
+
+class TaskInfo:
+    """Holds task execution state and metadata."""
+
+    def __init__(self, task_id: str, status: TaskStatus):
+        from datetime import datetime
+
+        self.task_id = task_id
+        self.status = status
+        self.response: TaskResponse | None = None
+        self.updated_at = datetime.now()
+        self.created_at = datetime.now()

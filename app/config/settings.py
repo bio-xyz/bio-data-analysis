@@ -50,10 +50,21 @@ class Settings:
     )
     DEFAULT_DATA_DIRECTORY: str = os.getenv("DEFAULT_DATA_DIRECTORY", "/home/user/data")
 
+    # File Upload Configuration
+    MAX_FILE_SIZE: int = (
+        int(os.getenv("MAX_FILE_SIZE_MB", "100")) * 1024 * 1024
+    )  # Convert MB to bytes (default: 100MB)
+
     # Agent Configuration
     CODE_GENERATION_MAX_RETRIES: int = int(
         os.getenv("CODE_GENERATION_MAX_RETRIES", "3")
     )
+
+    # Task Tracking Configuration
+    TASK_CLEANUP_INTERVAL_SECONDS: int = int(
+        os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60")
+    )
+    TASK_EXPIRY_SECONDS: int = int(os.getenv("TASK_EXPIRY_SECONDS", "300"))
 
 
 settings = Settings()
