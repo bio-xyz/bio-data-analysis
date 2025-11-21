@@ -11,6 +11,9 @@ load_dotenv()
 class Settings:
     """Application settings."""
 
+    # Security Configuration
+    API_KEY: Optional[str] = os.getenv("API_KEY")
+
     # Logging Configuration
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 

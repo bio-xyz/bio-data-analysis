@@ -2,6 +2,7 @@
 
 from app.utils.datafile import DataFile
 from app.utils.nb_builder import NotebookBuilder
+from app.utils.security import validate_api_key
 from app.utils.singleton import SingletonMeta
 
-__all__ = ["SingletonMeta", "NotebookBuilder", "DataFile"]
+__all__ = ["SingletonMeta", "NotebookBuilder", "DataFile", "validate_api_key"]

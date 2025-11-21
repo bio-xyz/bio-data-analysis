@@ -55,6 +55,9 @@ uv sync
 3. Create a `.env` file with required API keys:
 
 ```bash
+# Security - API key for authentication
+API_KEY=your-secret-api-key-here
+
 # Required environment for code execution
 E2B_API_KEY=your_e2b_api_key
 
@@ -110,6 +113,7 @@ Submit a data analysis task with the dose-response example:
 
 ```bash
 curl --location 'http://localhost:8000/api/task/run/sync' \
+  --header 'X-API-Key: your-secret-api-key-here' \
   --form 'data_files=@"example/dose_response.csv"' \
   --form 'task_description="Given this CSV of drug concentrations and viability, fit a 4-parameter logistic curve, estimate IC50, and show the curve."'
 ```

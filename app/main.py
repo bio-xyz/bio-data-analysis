@@ -2,11 +2,12 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_logger, setup_logging
 from app.routers import task_router
+from app.utils import validate_api_key
 
 load_dotenv()
 setup_logging()
@@ -41,9 +42,15 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(task_router.router, prefix="/api", tags=["task"])
+app.include_router(
+    task_router.router,
+    prefix="/api",
+    tags=["task"],
+    dependencies=[Depends(validate_api_key)],
+)
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[])
 async def health_check():
+    """Health check endpoint - publicly accessible without authentication."""
     return {"status": "healthy"}
