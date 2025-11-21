@@ -86,17 +86,6 @@ class TaskRequest(BaseModel):
         )
 
 
-class AnswerResponse(BaseModel):
-    summary: str = Field(
-        "",
-        description="A concise summary of the agent's findings or results",
-    )
-    details: list[str] = Field(
-        [],
-        description="Detailed explanations or observations made by the agent",
-    )
-
-
 class ArtifactResponse(BaseModel):
     description: str = Field(
         "",
@@ -137,9 +126,9 @@ class TaskResponse(BaseModel):
         None,
         description="The step-by-step plan created to accomplish the task",
     )
-    answer: AnswerResponse = Field(
-        {},
-        description="The agent's answer to the task, including summary and details",
+    answer: str = Field(
+        "",
+        description="The agent's detailed answer in markdown format",
     )
     artifacts: list[ArtifactResponse] = Field(
         [],

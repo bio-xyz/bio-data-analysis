@@ -12,13 +12,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 
 from app.config import get_logger
-from app.models.task import (
-    AnswerResponse,
-    TaskRequest,
-    TaskResponse,
-    TaskStatus,
-    TaskStatusResponse,
-)
+from app.models.task import TaskRequest, TaskResponse, TaskStatus, TaskStatusResponse
 from app.services.task_service import TaskService
 from app.utils.datafile import convert_upload_files_to_data_files
 
@@ -132,10 +126,7 @@ async def get_task_details(task_id: str) -> TaskResponse:
             id=task_id,
             status=TaskStatus.IN_PROGRESS,
             success=True,
-            answer=AnswerResponse(
-                summary="Task is still processing",
-                details=["Please check back later for results."],
-            ),
+            answer="Task is still processing. Please check back later for results.",
         )
 
     # Return the completed or failed response
@@ -147,8 +138,5 @@ async def get_task_details(task_id: str) -> TaskResponse:
         id=task_id,
         status=task_info.status,
         success=False,
-        answer=AnswerResponse(
-            summary=f"Task is {task_info.status.value}",
-            details=["No response data available"],
-        ),
+        answer=f"Task is {task_info.status.value}. No response data available",
     )

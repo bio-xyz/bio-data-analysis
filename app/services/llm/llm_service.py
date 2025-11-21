@@ -7,7 +7,7 @@ from e2b_code_interpreter.models import serialize_results
 
 from app.config import get_logger, settings
 from app.models.llm_config import LLMConfig
-from app.models.task import AnswerResponse, ArtifactResponse, Plan, TaskResponse
+from app.models.task import ArtifactResponse, Plan, TaskResponse
 from app.prompts import (
     build_code_generation_prompt,
     build_plan_generation_prompt,
@@ -288,18 +288,12 @@ class LLMService:
             logger.error(f"Response text: {response_text}")
             # Fallback response
             return TaskResponse(
-                answer=AnswerResponse(
-                    summary="Task executed",
-                    details=["Unable to parse LLM response"],
-                ),
+                answer="Task executed but unable to parse LLM response.",
                 artifacts=[],
             )
 
-        # Build AnswerResponse
-        answer = AnswerResponse(
-            summary=response_data.get("summary", ""),
-            details=response_data.get("details", []),
-        )
+        # Extract markdown answer
+        answer = response_data.get("answer", "")
 
         artifacts = []
         for artifact_data in response_data.get("artifacts", []):

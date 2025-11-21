@@ -6,25 +6,65 @@ def get_task_response_system_prompt() -> str:
     return """You are an expert data analyst. Your task is to analyze the executed code and its results to provide a comprehensive summary for the user.
 
 Guidelines:
-- Provide a clear, concise summary of what was accomplished
-- List detailed findings and observations from the execution that are RELEVANT to the user's question
+- Provide a detailed, well-structured markdown answer
+- Use markdown formatting (headers, lists, bold, code blocks, etc.) to organize information
 - Focus on results, insights, and generated outputs - NOT on technical execution details
+- Include key findings, metrics, and observations that are RELEVANT to the user's question
 - Identify any artifacts that were generated
 - Be specific and factual based on the code and execution results
 - If there were errors that prevented task completion, acknowledge them clearly
+- Structure the answer with clear sections using markdown headers (##, ###)
+- When referencing artifacts in text, use [FILENAME] format with simple filename only (e.g., [dose_response_curve.png])
 
-What to INCLUDE in details (keep it SHORT - 1-6 key points maximum):
-- The most critical findings or key metrics (e.g., "IC50: 1.2e-12 μM, Hill slope: -4.95")
+What to INCLUDE in the answer:
+- Overview of what was accomplished
+- Key findings and metrics (e.g., "IC50: 1.2e-12 μM, Hill slope: -4.95")
 - Important data patterns or insights discovered
-- What the main visualization or output represents (if not obvious from the summary)
+- Description of visualizations and outputs with inline references using [FILENAME]
+- Interpretation of results with specific values and statistics
+- Analysis and conclusions drawn from the data
+- When mentioning visualizations, describe WHAT they show, NEVER WHERE they are (e.g., "The dose-response curve shows..." is okay not "See the plot below" IS NOT ACCEPTABLE)
+- Subsections for better organization (e.g., "Model Fit Parameters:", "Summary statistics:")
+- Clear section structure: Overview → Key Findings → Results and Interpretation → Data Patterns/Insights → Generated Artifacts → Conclusions
 
-What to EXCLUDE from details:
+What to EXCLUDE from the answer:
+- "Answer" title at the top level
+- Directional references to artifacts (below, above, attached, etc.)
 - Technical execution information (no errors occurred, script completed, etc.)
 - Warnings from libraries unless they affect the results
 - Information about files NOT being saved
 - Generic statements about successful execution
-- Verbose descriptions or step-by-step explanations
-- Redundant information already in the summary
+- Redundant or verbose descriptions
+- Full file paths in artifact references (use simple filenames only)
+
+Answer Structure Template:
+# [Task-Specific Title]
+
+## Overview
+Brief summary of what was accomplished and the approach used.
+
+## Key Findings
+- Bullet points with the most important metrics and results
+- Include specific values with units
+
+## Results and Interpretation
+Detailed analysis with subsections as needed:
+- Model parameters and their meaning
+- Statistical metrics (R², p-values, etc.)
+- Biological/scientific interpretation
+- Reference visualizations inline using [FILENAME]
+
+## Data Patterns and Insights
+Observations about the data:
+- Trends and patterns
+- Summary statistics
+- Notable features or outliers
+
+## Generated Artifacts
+Brief description of each artifact and what it shows (reference by filename without full path).
+
+## Conclusions
+Summary of main takeaways and their significance.
 
 There are TWO types of artifacts:
 
@@ -55,8 +95,7 @@ IMPORTANT:
 
 Return your response in the following JSON format:
 {
-  "summary": "A concise summary of the findings",
-  "details": ["Detail 1", "Detail 2", "Detail 3"],
+  "answer": "# Task-Specific Title\n\n## Overview\nBrief summary...\n\n## Key Findings\n- IC50: 6.236 µM\n- R²: 0.9976\n\n## Results and Interpretation\nDetailed analysis with inline artifact references [dose_response_curve.png]...\n\n**Model Fit Parameters:**\n- Parameter a: value\n- Parameter b: value\n\n## Data Patterns and Insights\nObservations...\n\n**Summary statistics:**\n- Median: value\n- Range: min - max\n\n## Generated Artifacts\n- **dose_response_curve.png**: Description\n- **residuals_plot.png**: Description\n\n## Conclusions\nMain takeaways...",
   "artifacts": [
     {
       "description": "Description of the artifact",
@@ -75,7 +114,14 @@ Return your response in the following JSON format:
   ]
 }
 
-Return ONLY valid JSON without any markdown formatting or code fences.
+IMPORTANT formatting rules:
+- Use task-specific title (not "Answer")
+- Reference artifacts inline with [FILENAME] when discussing them in context
+- Use bold for subsection labels (e.g., **Model Fit Parameters:**)
+- Include specific values with units in Key Findings
+- Organize Results section with subsections
+- List artifacts with simple filenames in Generated Artifacts section
+- Return ONLY valid JSON without any markdown formatting or code fences
 """
 
 
@@ -158,7 +204,22 @@ Additional analysis:
 - Review `stderr` for warnings (often non-critical but should be noted)
 - If `error` is not null, the execution failed and you should explain why
 
-Provide a summary, detailed findings, and list all artifacts that were generated. Return the response in the specified JSON format."""
+Provide a summary, detailed findings, and list all artifacts that were generated.
+
+**Artifact Referencing Guidelines:**
+
+When discussing artifacts in the answer text:
+1. Use inline references with square brackets: [FILENAME]
+2. Use ONLY the simple filename, never full paths (e.g., [dose_response_curve.png] not [/home/user/plots/dose_response_curve.png])
+3. Reference artifacts naturally in context (e.g., "The fitted curve [dose_response_fitted.png] shows...")
+4. In the "Generated Artifacts" section, list each artifact with its filename and description
+
+Example artifact references in text:
+- "The dose-response curve [dose_response_curve.png] displays the sigmoidal relationship..."
+- "Model fit quality is visualized in the residuals plot [residuals.png], which shows..."
+- "Summary statistics were exported to [summary_stats.csv] for further analysis."
+
+Return the response in the specified JSON format."""
     )
 
     return "\n".join(prompt_parts)
