@@ -6,9 +6,9 @@ from typing import Optional
 
 from langgraph.graph.state import CompiledStateGraph
 
+from app.agent import AgentGraph, AgentState
 from app.config import get_logger, settings
 from app.models.task import TaskInfo, TaskRequest, TaskResponse, TaskStatus
-from app.services.agent import AgentGraph, AgentState
 from app.services.executor_service import ExecutorService
 from app.utils import SingletonMeta
 from app.utils.datafile import DataFile

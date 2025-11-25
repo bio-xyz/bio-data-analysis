@@ -23,19 +23,16 @@ Graph Flow:
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.config import get_logger
-from app.services.agent.nodes import (
+from app.agent.nodes import (
     AgentNode,
     analyze_node,
     code_generation_node,
     execution_node,
     plan_node,
 )
-from app.services.agent.state import AgentState
-from app.services.agent.transitions import (
-    should_continue_after_plan,
-    should_regenerate_code,
-)
+from app.agent.state import AgentState
+from app.agent.transitions import should_continue_after_plan, should_regenerate_code
+from app.config import get_logger
 from app.utils.singleton import SingletonMeta
 
 logger = get_logger(__name__)

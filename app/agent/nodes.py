@@ -2,9 +2,9 @@
 
 from enum import Enum
 
+from app.agent.signals import ActionSignal
+from app.agent.state import AgentState
 from app.config import get_logger, settings
-from app.services.agent.signals import ActionSignal
-from app.services.agent.state import AgentState
 from app.services.executor_service import ExecutorService
 from app.services.llm import LLMService
 from app.utils.nb_builder import NotebookBuilder
