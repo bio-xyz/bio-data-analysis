@@ -24,28 +24,28 @@ class Settings:
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     ANTHROPIC_CUSTOM_BASE_URL: Optional[str] = os.getenv("ANTHROPIC_CUSTOM_BASE_URL")
 
-    # Plan Generation LLM Config
-    PLAN_GENERATION_LLM: LLMConfig = LLMConfig(
-        provider=os.getenv("PLAN_GENERATION_PROVIDER", "openai"),
-        model_name=os.getenv("PLAN_GENERATION_MODEL", "gpt-5"),
-    )
-
-    # Code Generation LLM Config
-    CODE_GENERATION_LLM: LLMConfig = LLMConfig(
-        provider=os.getenv("CODE_GENERATION_PROVIDER", "openai"),
-        model_name=os.getenv("CODE_GENERATION_MODEL", "gpt-5"),
-    )
-
-    # Response Generation LLM Config
-    RESPONSE_GENERATION_LLM: LLMConfig = LLMConfig(
-        provider=os.getenv("RESPONSE_GENERATION_PROVIDER", "openai"),
-        model_name=os.getenv("RESPONSE_GENERATION_MODEL", "gpt-5"),
-    )
-
     # Default LLM Config
     DEFAULT_LLM: LLMConfig = LLMConfig(
         provider=os.getenv("DEFAULT_PROVIDER", "openai"),
         model_name=os.getenv("DEFAULT_MODEL", "gpt-5"),
+    )
+
+    # Plan Generation LLM Config
+    PLAN_GENERATION_LLM: LLMConfig = LLMConfig(
+        provider=os.getenv("PLAN_GENERATION_PROVIDER", DEFAULT_LLM.provider),
+        model_name=os.getenv("PLAN_GENERATION_MODEL", DEFAULT_LLM.model_name),
+    )
+
+    # Code Generation LLM Config
+    CODE_GENERATION_LLM: LLMConfig = LLMConfig(
+        provider=os.getenv("CODE_GENERATION_PROVIDER", DEFAULT_LLM.provider),
+        model_name=os.getenv("CODE_GENERATION_MODEL", DEFAULT_LLM.model_name),
+    )
+
+    # Response Generation LLM Config
+    RESPONSE_GENERATION_LLM: LLMConfig = LLMConfig(
+        provider=os.getenv("RESPONSE_GENERATION_PROVIDER", DEFAULT_LLM.provider),
+        model_name=os.getenv("RESPONSE_GENERATION_MODEL", DEFAULT_LLM.model_name),
     )
 
     DEFAULT_WORKING_DIRECTORY: str = os.getenv(
