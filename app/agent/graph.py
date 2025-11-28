@@ -15,6 +15,9 @@ Graph Flow:
     answering -> END
 """
 
+from functools import wraps
+from typing import Callable
+
 from langgraph.graph import END, START, StateGraph
 
 from app.agent.nodes import (
@@ -33,9 +36,33 @@ from app.agent.transitions import (
     route_after_planning,
 )
 from app.config import get_logger
+from app.models.task import TaskStatus
 from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
+
+
+def with_status_update(
+    node_func: Callable[[AgentState], dict],
+) -> Callable[[AgentState], dict]:
+    """
+    Decorator that updates task status to IN_PROGRESS before each node execution.
+
+    Args:
+        node_func: The node function to wrap
+
+    Returns:
+        Wrapped function that updates status before execution
+    """
+
+    @wraps(node_func)
+    def wrapper(state: AgentState) -> dict:
+        task_info = state.get("task_info")
+        if task_info:
+            task_info.update_status(TaskStatus.IN_PROGRESS)
+        return node_func(state)
+
+    return wrapper
 
 
 class AgentGraph(metaclass=SingletonMeta):
@@ -57,12 +84,16 @@ class AgentGraph(metaclass=SingletonMeta):
         # Create graph with AgentState
         graph = StateGraph(AgentState)
 
-        # Add nodes
-        graph.add_node(AgentNode.PLANNING, planning_node)
-        graph.add_node(AgentNode.CODE_PLANNING, code_planning_node)
-        graph.add_node(AgentNode.CODE_GENERATION, code_generation_node)
-        graph.add_node(AgentNode.CODE_EXECUTION, code_execution_node)
-        graph.add_node(AgentNode.ANSWERING, answering_node)
+        # Add nodes (wrapped with status update)
+        graph.add_node(AgentNode.PLANNING, with_status_update(planning_node))
+        graph.add_node(AgentNode.CODE_PLANNING, with_status_update(code_planning_node))
+        graph.add_node(
+            AgentNode.CODE_GENERATION, with_status_update(code_generation_node)
+        )
+        graph.add_node(
+            AgentNode.CODE_EXECUTION, with_status_update(code_execution_node)
+        )
+        graph.add_node(AgentNode.ANSWERING, with_status_update(answering_node))
 
         # Add edges
         # START -> planning

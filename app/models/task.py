@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 
 from fastapi import Form
@@ -105,10 +106,14 @@ class TaskInfo:
     """Holds task execution state and metadata."""
 
     def __init__(self, task_id: str, status: TaskStatus):
-        from datetime import datetime
-
         self.task_id = task_id
         self.status = status
         self.response: TaskResponse | None = None
         self.updated_at = datetime.now()
         self.created_at = datetime.now()
+
+    def update_status(self, status: TaskStatus, response: TaskResponse | None = None):
+        self.status = status
+        if response:
+            self.response = response
+        self.updated_at = datetime.now()

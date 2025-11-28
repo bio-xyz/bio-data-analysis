@@ -70,7 +70,7 @@ class TaskService(metaclass=SingletonMeta):
                 data_files_description=task.data_files_description,
                 uploaded_files=uploaded_files,
                 sandbox_id=sandbox_id,
-                task_id=task_id,
+                task_info=self.get_task(task_id),
             )
 
             logger.info("Starting LangGraph execution...")
@@ -147,12 +147,8 @@ class TaskService(metaclass=SingletonMeta):
             response: Optional task response
         """
         task_info = self._tasks.get(task_id)
-        if task_info:
-            task_info.status = status
-            task_info.updated_at = datetime.now()
-            if response:
-                task_info.response = response
-            logger.info(f"Updated task {task_id} status to {status}")
+        task_info.update_status(status, response)
+        logger.info(f"Updated task {task_id} status to {status}")
 
     def process_task_sync(
         self, task: TaskRequest, data_files: list[DataFile]

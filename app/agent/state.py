@@ -6,7 +6,7 @@ from e2b_code_interpreter import Execution
 from langgraph.graph import MessagesState
 from pydantic import Field
 
-from app.models.task import TaskResponse
+from app.models.task import TaskInfo, TaskResponse
 from app.utils.nb_builder import NotebookBuilder
 
 
@@ -36,7 +36,7 @@ class AgentState(MessagesState):
 
     # Task execution environment
     sandbox_id: str = Field(description="Sandbox ID for code execution")
-    task_id: str = Field(description="Unique task ID for tracking")
+    task_info: TaskInfo = Field(description="TaskInfo object for tracking task status")
 
     # Agent control
     action_signal: str = Field(default="continue", description="Signal for next action")
