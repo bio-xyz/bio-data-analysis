@@ -39,7 +39,7 @@ class ExecutorService(metaclass=SingletonMeta):
             The sandbox ID
         """
         logger.info("Creating new sandbox...")
-        sandbox = Sandbox.create()
+        sandbox = Sandbox.create(timeout=1800)
         sandbox_id = sandbox.get_info().sandbox_id
 
         self.sandboxes[sandbox_id] = sandbox

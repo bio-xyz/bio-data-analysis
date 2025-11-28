@@ -10,52 +10,6 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
-class PlanStep(BaseModel):
-    step_number: int = Field(
-        ...,
-        description="The sequential number of the step in the plan",
-    )
-    title: str = Field(
-        ...,
-        description="Brief title describing what this step accomplishes",
-    )
-    description: str = Field(
-        ...,
-        description="Detailed description of what needs to be done in this step",
-    )
-    expected_output: str = Field(
-        "",
-        description="What should be produced or achieved in this step",
-    )
-
-
-class Plan(BaseModel):
-    success: bool = Field(
-        True,
-        description="Flag indicating whether the plan can be created with available resources",
-    )
-    goal: str = Field(
-        "",
-        description="Brief description of the overall goal",
-    )
-    available_resources: list[str] = Field(
-        [],
-        description="List of available data files and their descriptions",
-    )
-    steps: list[PlanStep] = Field(
-        [],
-        description="Sequential steps to accomplish the task",
-    )
-    expected_artifacts: list[str] = Field(
-        [],
-        description="List of expected outputs like plots, tables, reports, etc.",
-    )
-    error: str = Field(
-        "",
-        description="Error message if success=false, explaining what resources are missing",
-    )
-
-
 class TaskRequest(BaseModel):
     task_description: str = Field(
         ...,
@@ -121,10 +75,6 @@ class TaskResponse(BaseModel):
     status: TaskStatus | None = Field(
         None,
         description="Current status of the task",
-    )
-    plan: Plan | None = Field(
-        None,
-        description="The step-by-step plan created to accomplish the task",
     )
     answer: str = Field(
         "",

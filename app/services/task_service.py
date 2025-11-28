@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+import nbformat
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent import AgentGraph, AgentState
@@ -69,14 +70,15 @@ class TaskService(metaclass=SingletonMeta):
                 data_files_description=task.data_files_description,
                 uploaded_files=uploaded_files,
                 sandbox_id=sandbox_id,
-                max_retries=3,
-                notebook_builder=NotebookBuilder(),
+                task_id=task_id,
             )
 
             logger.info("Starting LangGraph execution...")
 
-            # Execute the graph
-            final_state: AgentState = self.graph.invoke(initial_state)
+            # Execute the graph with high recursion limit for complex tasks
+            final_state: AgentState = self.graph.invoke(
+                initial_state, config={"recursion_limit": 250}
+            )
 
             logger.info("LangGraph execution completed")
             logger.debug(f"Final state: {final_state}")
@@ -210,12 +212,7 @@ class TaskService(metaclass=SingletonMeta):
             id=task_id,
             status=TaskStatus.FAILED,
             success=False,
-            answer={
-                "summary": "Task processing failed",
-                "details": [
-                    "Please check your task description and data files, then try again.",
-                ],
-            },
+            answer="Task processing failed. Please check your task description and data files, then try again.",
         )
 
     async def _cleanup_expired_tasks(self):

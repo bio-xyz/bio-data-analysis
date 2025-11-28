@@ -16,8 +16,41 @@ Guidelines:
 - Structure the answer with clear sections using markdown headers (##, ###)
 - When referencing artifacts in text, use [FILENAME] format with simple filename only (e.g., [dose_response_curve.png])
 
+HANDLING DIFFERENT SCENARIOS:
+
+1. SUCCESSFUL EXECUTION (completed steps exist with success=true):
+   - **CRITICAL**: When code was executed successfully, NEVER ask clarifying questions
+   - Provide comprehensive analysis of the actual results obtained
+   - Include key findings, metrics, and insights from the execution output
+   - Reference generated artifacts
+   - Summarize what was accomplished based on the actual code and results
+
+2. NO CODE EXECUTION (direct answer):
+   - Only if explicitly marked as not requiring code
+   - Answer the user's question directly
+   - Explain why code execution was not needed
+   - Provide helpful information or guidance
+
+3. CLARIFICATION NEEDED (explicitly flagged):
+   - Only if the task was explicitly marked as needing clarification BEFORE execution
+   - This scenario does NOT apply when completed_steps exist
+   - Explain what aspects of the request are unclear
+   - Ask specific clarifying questions
+
+4. EXECUTION FAILED (error is present):
+   - Acknowledge the failure clearly
+   - Explain what went wrong
+   - Describe what was attempted
+   - Suggest possible solutions or next steps
+
+**IMPORTANT PRIORITY RULES**:
+- If completed_steps exist with code and output → ALWAYS use scenario #1 (SUCCESSFUL EXECUTION)
+- NEVER ask for clarifications when execution results are available
+- NEVER hypothesize about what might be needed if actual results exist
+- Your job is to SUMMARIZE AND ANALYZE the actual execution results, not to plan future work
+
 What to INCLUDE in the answer:
-- Overview of what was accomplished
+- Overview of what was accomplished (or attempted)
 - Key findings and metrics (e.g., "IC50: 1.2e-12 μM, Hill slope: -4.95")
 - Important data patterns or insights discovered
 - Description of visualizations and outputs with inline references using [FILENAME]
@@ -96,6 +129,7 @@ IMPORTANT:
 Return your response in the following JSON format:
 {
   "answer": "# Task-Specific Title\n\n## Overview\nBrief summary...\n\n## Key Findings\n- IC50: 6.236 µM\n- R²: 0.9976\n\n## Results and Interpretation\nDetailed analysis with inline artifact references [dose_response_curve.png]...\n\n**Model Fit Parameters:**\n- Parameter a: value\n- Parameter b: value\n\n## Data Patterns and Insights\nObservations...\n\n**Summary statistics:**\n- Median: value\n- Range: min - max\n\n## Generated Artifacts\n- **dose_response_curve.png**: Description\n- **residuals_plot.png**: Description\n\n## Conclusions\nMain takeaways...",
+  "success": true,
   "artifacts": [
     {
       "description": "Description of the artifact",
@@ -114,6 +148,14 @@ Return your response in the following JSON format:
   ]
 }
 
+OR more direct answer in case of no code execution needed, clarification needed, or failure:
+{
+  "answer": "Direct answer to the user's question...",
+  "success": true | false,
+  "artifacts": []
+}
+
+
 IMPORTANT formatting rules:
 - Use task-specific title (not "Answer")
 - Reference artifacts inline with [FILENAME] when discussing them in context
@@ -127,10 +169,10 @@ IMPORTANT formatting rules:
 
 def build_task_response_prompt(
     task_description: str,
-    generated_code: str,
-    execution_json: str,
-    success: bool = True,
-    error: str | None = None,
+    generated_code: str = "",
+    execution_json: str = "{}",
+    completed_steps: list[dict] | None = None,
+    failure_reason: str | None = None,
 ) -> str:
     """
     Build the user prompt for task response generation.
@@ -139,16 +181,48 @@ def build_task_response_prompt(
         task_description: Description of the original task
         generated_code: The code that was generated and executed
         execution_json: JSON string from Execution.to_json() containing logs, artifacts, and errors
-        success: Flag indicating whether the operation was successful (plan or execution)
-        error: Error message if planning or execution failed
+        completed_steps: List of completed steps (for  architecture)
+        failure_reason: Reason for failure (for  architecture)
 
     Returns:
         str: The formatted user prompt
     """
     prompt_parts = [f"Original Task: {task_description}"]
 
-    if not success and error:
-        prompt_parts.append(f"\n\nWARNING - ERROR OCCURRED:\n{error}")
+    # Handle failure case
+    if failure_reason:
+        prompt_parts.append("\n\nWARNING - TASK FAILED:")
+        prompt_parts.append(f"\nFailure reason: {failure_reason}")
+
+    # Add completed steps summary for architecture
+    if completed_steps:
+        # Count successful steps
+        successful_steps = [s for s in completed_steps if s.get("success", False)]
+        prompt_parts.append("\n\n" + "=" * 60)
+        prompt_parts.append("IMPORTANT: CODE WAS EXECUTED SUCCESSFULLY")
+        prompt_parts.append("=" * 60)
+        prompt_parts.append(
+            f"\n{len(successful_steps)} out of {len(completed_steps)} steps completed successfully."
+        )
+        prompt_parts.append(
+            "Your task is to SUMMARIZE the actual results below. DO NOT ask clarifying questions."
+        )
+        prompt_parts.append(
+            "DO NOT suggest what could be done - describe what WAS done and the results."
+        )
+        prompt_parts.append("\n=== COMPLETED STEPS ===")
+        for i, step in enumerate(completed_steps, 1):
+            prompt_parts.append(f"\nStep {i}: {step.get('goal', 'N/A')}")
+            prompt_parts.append(
+                f"  Status: {'SUCCESS' if step.get('success') else 'FAILED'}"
+            )
+            if step.get("code"):
+                prompt_parts.append(f"  Code:\n```python\n{step['code']}\n```")
+            if step.get("output"):
+                output = step.get("output", "")
+                if len(output) > 500:
+                    output = output[:500] + "... [truncated]"
+                prompt_parts.append(f"  Output: {output}")
 
     if generated_code:
         prompt_parts.append(f"\n\nGenerated Code:\n```python\n{generated_code}\n```")
@@ -221,5 +295,20 @@ Example artifact references in text:
 
 Return the response in the specified JSON format."""
     )
+
+    # Add final reminder for successful execution scenarios
+    if completed_steps and any(s.get("success", False) for s in completed_steps):
+        prompt_parts.append(
+            """
+============================================================
+FINAL REMINDER: This task was SUCCESSFULLY EXECUTED.
+============================================================
+- Analyze the ACTUAL outputs and results from the completed steps above
+- Extract key metrics, findings, and insights from the execution output
+- DO NOT ask clarifying questions - the task is DONE
+- DO NOT suggest what "could" or "should" be done - describe what WAS done
+- Summarize the real results that were obtained
+============================================================"""
+        )
 
     return "\n".join(prompt_parts)

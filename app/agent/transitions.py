@@ -1,81 +1,118 @@
-"""State transition logic for the agent FST."""
+"""Transition routing functions for the agent graph.
 
-from app.agent.nodes import AgentNode
-from app.agent.signals import ActionSignal
+These functions determine the next node based on the current state and action signals.
+"""
+
+from typing import Literal
+
+from app.agent.signals import ActionSignal, AgentNode
 from app.agent.state import AgentState
-from app.config import get_logger, settings
+from app.config import get_logger
 
 logger = get_logger(__name__)
 
 
-def should_continue_after_plan(state: AgentState) -> str:
+def route_after_planning(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_PLANNING, AgentNode.ANSWERING]:
     """
-    Determine next step after plan generation.
+    Route after PLANNING_NODE.
+
+    Routes to:
+    - CODE_PLANNING: Task requires code execution
+    - ANSWERING: Direct answer or clarification needed
 
     Args:
         state: Current agent state
 
     Returns:
-        Next node to execute: "code_generation" or "analyze"
+        Next node name
     """
-    action_signal = state.get("action_signal")
-    success = state.get("success", True)
+    signal = state.get("action_signal")
 
-    logger.info(f"Plan transition check - Signal: {action_signal}, Success: {success}")
+    if signal == ActionSignal.GENERAL_ANSWER or signal == ActionSignal.CLARIFICATION:
+        logger.info("Routing to ANSWERING_NODE (no code needed)")
+        return AgentNode.ANSWERING
 
-    # If plan failed (missing data), go directly to analyze
-    if action_signal == ActionSignal.PLAN_ERROR or not success:
-        logger.info("Transition: plan error -> analyze (missing data)")
-        return AgentNode.ANALYZE
+    logger.info("Routing to CODE_PLANNING_NODE")
+    return AgentNode.CODE_PLANNING
 
-    # If plan succeeded, proceed to code generation
-    if action_signal == ActionSignal.PLAN_COMPLETE:
-        logger.info("Transition: plan complete -> code_generation")
-        return AgentNode.CODE_GENERATION
 
-    # Default: proceed to code generation
-    logger.info("Transition: default -> code_generation")
+def route_after_code_planning(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_GENERATION, AgentNode.ANSWERING]:
+    """
+    Route after CODE_PLANNING_NODE.
+
+    Routes to:
+    - CODE_GENERATION: Need to generate code for step
+    - ANSWERING: Task complete or aborting
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Next node name
+    """
+    signal = state.get("action_signal")
+
+    if signal == ActionSignal.TASK_COMPLETED or signal == ActionSignal.TASK_FAILED:
+        logger.info("Routing to ANSWERING_NODE (finalize)")
+        return AgentNode.ANSWERING
+
+    # ITERATE_CURRENT_STEP or PROCEED_TO_NEXT_STEP both go to code generation
+    logger.info("Routing to CODE_GENERATION_NODE")
     return AgentNode.CODE_GENERATION
 
 
-def should_regenerate_code(state: AgentState) -> str:
+def route_after_code_generation(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_EXECUTION]:
     """
-    Determine if code should be regenerated after execution error.
+    Route after CODE_GENERATION_NODE.
+
+    Always routes to code_execution to run the generated code.
 
     Args:
         state: Current agent state
 
     Returns:
-        Next node to execute: "code_generation" or "analyze"
+        Next node name
     """
-    action_signal = state.get("action_signal")
-    success = state.get("success", True)
-    attempts = state.get("code_generation_attempts", 0)
-    max_retries = state.get("max_retries", settings.CODE_GENERATION_MAX_RETRIES)
+    logger.info("Routing to CODE_EXECUTION_NODE")
+    return AgentNode.CODE_EXECUTION
 
-    logger.info(
-        f"Execution transition check - Signal: {action_signal}, Success: {success}, "
-        f"Attempts: {attempts}/{max_retries}"
-    )
 
-    # If execution was successful, move to analyze
-    if action_signal == ActionSignal.EXECUTION_SUCCESS and success:
-        logger.info("Transition: execution success -> analyze")
-        return AgentNode.ANALYZE
+def route_after_code_execution(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_PLANNING]:
+    """
+    Route after CODE_EXECUTION_NODE.
 
-    # If execution failed and we haven't exceeded max retries, regenerate code
-    if action_signal == ActionSignal.EXECUTION_ERROR and not success:
-        if attempts < max_retries:
-            logger.info(
-                f"Transition: execution error -> regenerate code (attempt {attempts + 1}/{max_retries})"
-            )
-            return AgentNode.CODE_GENERATION
-        else:
-            logger.warning(
-                f"Transition: max retries reached ({max_retries}) -> analyze with error"
-            )
-            return AgentNode.ANALYZE
+    Always routes back to code_planning to decide next action.
+    The LLM in code_planning will decide whether to:
+    - Retry the step (on failure)
+    - Proceed to next step (on success)
+    - Finalize (task complete or giving up)
 
-    # Default: move to analyze
-    logger.info("Transition: default -> analyze")
-    return AgentNode.ANALYZE
+    Args:
+        state: Current agent state
+
+    Returns:
+        Next node name
+    """
+    signal = state.get("action_signal", None)
+    code_generation_attempts = state.get("code_generation_attempts", 0)
+
+    if signal == ActionSignal.CODE_EXECUTION_SUCCESS:
+        logger.info("Code executed successfully, routing to CODE_PLANNING_NODE")
+        return AgentNode.CODE_PLANNING
+    elif signal == ActionSignal.CODE_EXECUTION_FAILED and code_generation_attempts >= 3:
+        logger.info(
+            f"Code executed with failure and max attempts reached ({code_generation_attempts}), routing to CODE_PLANNING_NODE for final decision"
+        )
+        return AgentNode.CODE_PLANNING
+
+    # On failure with attempts left, also go to code_planning to retry
+    logger.info("Code execution failed, routing to CODE_GENERATION_NODE for retry")
+    return AgentNode.CODE_GENERATION

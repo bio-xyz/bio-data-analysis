@@ -1,105 +1,126 @@
-"""Main LangGraph definition for the data science agent.
+"""Agent graph definition using LangGraph.
+
+This module creates the FST-based multi-stage agent graph with:
+- PLANNING_NODE: Entry point, decides CODE_PLANNING or ANSWERING
+- CODE_PLANNING_NODE: Step-by-step planning and management
+- CODE_GENERATION_NODE: Generates code for current step
+- CODE_EXECUTION_NODE: Executes code in sandbox
+- ANSWERING_NODE: Generates final response
 
 Graph Flow:
-
-    START
-      ↓
-    [plan]  ───────────→  Generate execution plan
-      ↓
-      ├─ SUCCESS ────────→  [code_generation]  ──→  Generate Python code
-      │                                                  ↓
-      │                                            [execution]  ────────→  Execute code in sandbox
-      │                                                  ↓
-      │                                            ├─ SUCCESS ────────→  [analyze]  ──→  END
-      │                                            │
-      │                                            └─ ERROR ──────────→  [code_generation]  (retry)
-      │                                                                   ↓ (if max_retries reached)
-      │                                                                   [analyze]  ──→  END
-      │
-      └─ ERROR (missing data) ───→  [analyze]  ──→  Generate error response  ──→  END
-
+    START -> planning -> [code_planning | answering]
+    code_planning -> [code_generation | answering]
+    code_generation -> code_execution
+    code_execution -> [code_planning | code_generation]
+    answering -> END
 """
 
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
+from langgraph.graph import END, START, StateGraph
 
 from app.agent.nodes import (
-    AgentNode,
-    analyze_node,
+    answering_node,
+    code_execution_node,
     code_generation_node,
-    execution_node,
-    plan_node,
+    code_planning_node,
+    planning_node,
 )
+from app.agent.signals import AgentNode
 from app.agent.state import AgentState
-from app.agent.transitions import should_continue_after_plan, should_regenerate_code
+from app.agent.transitions import (
+    route_after_code_execution,
+    route_after_code_generation,
+    route_after_code_planning,
+    route_after_planning,
+)
 from app.config import get_logger
-from app.utils.singleton import SingletonMeta
+from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
 
 
 class AgentGraph(metaclass=SingletonMeta):
-    """
-    Singleton class that manages the agent workflow graph.
-
-    The graph is compiled once and reused across all requests.
-    """
+    """Singleton for the compiled agent graph."""
 
     def __init__(self):
-        """Initialize and compile the agent workflow graph."""
+        """Initialize and compile the agent graph."""
         logger.info("Creating agent graph...")
-        self._graph: CompiledStateGraph = self._create_graph()
+        self.graph = self._create_graph()
         logger.info("Agent graph created successfully")
 
-    def _create_graph(self) -> CompiledStateGraph:
+    def _create_graph(self) -> StateGraph:
         """
-        Create and compile the agent workflow graph.
+        Create the agent graph with FST-based multi-stage architecture.
 
         Returns:
-            Compiled StateGraph ready for execution
+            Compiled StateGraph
         """
-        # Create the graph with AgentState
-        workflow = StateGraph(AgentState)
+        # Create graph with AgentState
+        graph = StateGraph(AgentState)
 
         # Add nodes
-        workflow.add_node(AgentNode.PLAN, plan_node)
-        workflow.add_node(AgentNode.CODE_GENERATION, code_generation_node)
-        workflow.add_node(AgentNode.EXECUTION, execution_node)
-        workflow.add_node(AgentNode.ANALYZE, analyze_node)
-
-        # Set entry point
-        workflow.set_entry_point(AgentNode.PLAN)
+        graph.add_node(AgentNode.PLANNING, planning_node)
+        graph.add_node(AgentNode.CODE_PLANNING, code_planning_node)
+        graph.add_node(AgentNode.CODE_GENERATION, code_generation_node)
+        graph.add_node(AgentNode.CODE_EXECUTION, code_execution_node)
+        graph.add_node(AgentNode.ANSWERING, answering_node)
 
         # Add edges
-        # Plan -> Code Generation (if success) OR Analyze (if error/missing data)
-        workflow.add_conditional_edges(
-            AgentNode.PLAN,
-            should_continue_after_plan,
+        # START -> planning
+        graph.add_edge(START, AgentNode.PLANNING)
+
+        # planning -> code_planning | answering
+        graph.add_conditional_edges(
+            AgentNode.PLANNING,
+            route_after_planning,
             {
-                AgentNode.CODE_GENERATION: AgentNode.CODE_GENERATION,  # Plan success
-                AgentNode.ANALYZE: AgentNode.ANALYZE,  # Plan error (e.g., missing data)
+                AgentNode.CODE_PLANNING: AgentNode.CODE_PLANNING,
+                AgentNode.ANSWERING: AgentNode.ANSWERING,
             },
         )
 
-        # Code Generation -> Execution (always)
-        workflow.add_edge(AgentNode.CODE_GENERATION, AgentNode.EXECUTION)
-
-        # Execution -> Code Generation (if error) OR Analyze (if success)
-        workflow.add_conditional_edges(
-            AgentNode.EXECUTION,
-            should_regenerate_code,
+        # code_planning -> code_generation | answering
+        graph.add_conditional_edges(
+            AgentNode.CODE_PLANNING,
+            route_after_code_planning,
             {
-                AgentNode.CODE_GENERATION: AgentNode.CODE_GENERATION,  # Retry on error
-                AgentNode.ANALYZE: AgentNode.ANALYZE,  # Success or max retries
+                AgentNode.CODE_GENERATION: AgentNode.CODE_GENERATION,
+                AgentNode.ANSWERING: AgentNode.ANSWERING,
             },
         )
 
-        # Analyze -> END
-        workflow.add_edge(AgentNode.ANALYZE, END)
+        # code_generation -> code_execution
+        graph.add_conditional_edges(
+            AgentNode.CODE_GENERATION,
+            route_after_code_generation,
+            {
+                AgentNode.CODE_EXECUTION: AgentNode.CODE_EXECUTION,
+            },
+        )
+
+        # code_execution -> code_planning (always goes back to planning)
+        graph.add_conditional_edges(
+            AgentNode.CODE_EXECUTION,
+            route_after_code_execution,
+            {
+                AgentNode.CODE_GENERATION: AgentNode.CODE_GENERATION,
+                AgentNode.CODE_PLANNING: AgentNode.CODE_PLANNING,
+            },
+        )
+
+        # answering -> END
+        graph.add_edge(AgentNode.ANSWERING, END)
 
         # Compile the graph
-        return workflow.compile()
+        compiled = graph.compile()
+        logger.info("Graph compiled successfully")
 
-    def get_graph(self) -> CompiledStateGraph:
-        """Get the compiled graph instance."""
-        return self._graph
+        return compiled
+
+    def get_graph(self) -> StateGraph:
+        """
+        Get the compiled agent graph.
+
+        Returns:
+            Compiled StateGraph instance
+        """
+        return self.graph
