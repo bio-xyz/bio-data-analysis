@@ -62,7 +62,7 @@ wheels = [
 ]
 
 [[package]]
-name = "bio-code-interpreter"
+name = "bio-data-analysis"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

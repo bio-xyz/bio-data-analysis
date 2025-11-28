@@ -1,4 +1,4 @@
-# Bio Code Interpreter
+# Bio Data Analysis Agent
 
 A data science agent with integrated code interpreter for executing Python code, analyzing data, and generating insights.
 
@@ -15,19 +15,21 @@ A data science agent with integrated code interpreter for executing Python code,
 ```
 START
   ↓
-[plan]  ───────────→  Generate execution plan
+[planning]  ──────────────→  Analyze task, decide approach
   ↓
-  ├─ SUCCESS ────────→  [code_generation]  ──→  Generate Python code
-  │                                                  ↓
-  │                                            [execution]  ────────→  Execute code in sandbox
-  │                                                  ↓
-  │                                            ├─ SUCCESS ────────→  [analyze]  ──→  END
-  │                                            │
-  │                                            └─ ERROR ──────────→  [code_generation]  (retry)
-  │                                                                   ↓ (if max_retries reached)
-  │                                                                   [analyze]  ──→  END
+  ├─ REQUIRES CODE ──────→  [code_planning]  ──→  Create step-by-step plan
+  │                               ↓
+  │                         ├─ HAS STEPS ────→  [code_generation]  ──→  Generate Python code
+  │                         │                         ↓
+  │                         │                   [code_execution]  ──→  Execute in sandbox
+  │                         │                         ↓
+  │                         │                   ├─ SUCCESS ───────→  [code_planning]  (next step)
+  │                         │                   │
+  │                         │                   └─ ERROR ─────────→  [code_generation]  (retry)
+  │                         │
+  │                         └─ ALL COMPLETE ──→  [answering]  ──→  END
   │
-  └─ ERROR (missing data) ───→  [analyze]  ──→  Generate error response  ──→  END
+  └─ NO CODE NEEDED ─────→  [answering]  ──→  Generate response  ──→  END
 ```
 
 ## Prerequisites
@@ -42,8 +44,8 @@ START
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/bio-xyz/bio-code-interpreter.git
-cd bio-code-interpreter
+git clone https://github.com/bio-xyz/bio-data-analysis.git
+cd bio-data-analysis
 ```
 
 2. Install dependencies using uv:
@@ -89,17 +91,17 @@ Once the server is running, visit:
 
 ```
 app/
+├── agent/             # Agent FST implementation
+│   ├── graph.py       # LangGraph workflow definition
+│   ├── nodes.py       # FST state nodes
+│   ├── state.py       # Agent state management
+│   ├── transitions.py # State transition logic
+│   └── signals.py     # Action signals
 ├── config/          # Application configuration and logging
 ├── models/          # Pydantic models and data structures
 ├── prompts/         # LLM prompt templates
 ├── routers/         # FastAPI route handlers
 ├── services/        # Core business logic
-│   ├── agent/       # Agent FST implementation
-│   │   ├── graph.py       # LangGraph workflow definition
-│   │   ├── nodes.py       # FST state nodes
-│   │   ├── state.py       # Agent state management
-│   │   ├── transitions.py # State transition logic
-│   │   └── signals.py     # Action signals
 │   ├── llm/         # LLM service abstractions
 │   └── executor_service.py # E2B code execution
 └── utils/           # Utility functions
@@ -131,9 +133,10 @@ Key settings can be configured via environment variables or in `app/config/setti
 
 The agent follows a Finite State Transducer (FST) architecture with the following states:
 
-1. **Plan**: Analyzes the task and creates an execution plan
-2. **Code Generation**: Generates Python code based on the plan
-3. **Execution**: Runs the code in an E2B sandbox
-4. **Analyze**: Processes results and generates final response
+1. **Planning**: Analyzes the task and decides whether code execution is needed
+2. **Code Planning**: Creates a step-by-step execution plan and manages step progression
+3. **Code Generation**: Generates Python code for the current step
+4. **Code Execution**: Runs the code in an E2B sandbox
+5. **Answering**: Processes results and generates final response
 
 State transitions are determined by action signals and execution feedback, enabling automatic error recovery and retry logic.
