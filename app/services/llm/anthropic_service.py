@@ -76,6 +76,7 @@ class AnthropicService(BaseLLMService, metaclass=SingletonMeta):
 
         params = {
             "model": llm_config.model_name,
+            "max_tokens": llm_config.max_tokens,
             "messages": filtered_messages,
         }
 

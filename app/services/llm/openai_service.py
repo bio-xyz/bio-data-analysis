@@ -64,6 +64,7 @@ class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
         """
         params = {
             "model": llm_config.model_name,
+            "max_completion_tokens": llm_config.max_tokens,
             "messages": messages,
         }
 
