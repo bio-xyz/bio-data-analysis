@@ -1,31 +1,34 @@
-from typing import Any, Dict, Optional
+from typing import Dict
 
 from anthropic import Anthropic
+from anthropic.types.message import Message
 
 from app.config import get_logger, settings
+from app.models.llm_config import LLMConfig
 from app.services.llm.base_llm_service import BaseLLMService
+from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
 
 
-class AnthropicService(BaseLLMService):
+class AnthropicService(BaseLLMService, metaclass=SingletonMeta):
     """Anthropic LLM service implementation."""
-
-    # Shared client across all instances (class-level singleton)
-    _client: Optional[Anthropic] = None
 
     # Supported Anthropic model patterns
     SUPPORTED_PATTERNS = ["claude", "anthropic"]
 
-    def __init__(self, model_name: str):
-        """
-        Initialize the Anthropic service.
+    def __init__(self):
+        if not settings.ANTHROPIC_API_KEY:
+            raise ValueError(
+                "ANTHROPIC_API_KEY must be set to instantiate Anthropic client"
+            )
 
-        Args:
-            model_name: The name of the Anthropic model to use.
-        """
-        super().__init__(model_name)
-        logger.info(f"Anthropic service initialized with model: {model_name}")
+        client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
+        if settings.ANTHROPIC_CUSTOM_BASE_URL:
+            client_kwargs["base_url"] = settings.ANTHROPIC_CUSTOM_BASE_URL
+
+        self.client = Anthropic(**client_kwargs)
+        logger.info("Anthropic client instantiated successfully")
 
     @classmethod
     def is_supported(cls, model_name: str) -> bool:
@@ -44,36 +47,9 @@ class AnthropicService(BaseLLMService):
         model_lower = model_name.lower()
         return any(pattern in model_lower for pattern in cls.SUPPORTED_PATTERNS)
 
-    def instantiate_client(self) -> Any:
-        """
-        Instantiate and return the Anthropic API client.
-        Client is shared across all instances of this class.
-
-        Returns:
-            The initialized Anthropic client.
-
-        Raises:
-            ImportError: If the anthropic package is not installed.
-            ValueError: If the ANTHROPIC_API_KEY is not configured.
-        """
-        if AnthropicService._client is not None:
-            return AnthropicService._client
-
-        if not settings.ANTHROPIC_API_KEY:
-            raise ValueError(
-                f"Model '{self.model_name}' requires ANTHROPIC_API_KEY to be set"
-            )
-
-        client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
-        if settings.ANTHROPIC_CUSTOM_BASE_URL:
-            client_kwargs["base_url"] = settings.ANTHROPIC_CUSTOM_BASE_URL
-
-        AnthropicService._client = Anthropic(**client_kwargs)
-        logger.info("Anthropic client instantiated successfully")
-        return AnthropicService._client
-
     def generate_response(
         self,
+        llm_config: LLMConfig,
         messages: list[Dict[str, str]],
         **kwargs,
     ) -> str:
@@ -81,15 +57,13 @@ class AnthropicService(BaseLLMService):
         Generate a response using Anthropic API.
 
         Args:
+            llm_config: Configuration for the LLM model.
             messages: List of message dictionaries with 'role' and 'content' keys.
             **kwargs: Additional Anthropic-specific parameters.
 
         Returns:
             str: The generated response text.
         """
-        if self._client is None:
-            self._client = self.instantiate_client()
-
         # Anthropic requires system messages to be separate
         system_message = None
         filtered_messages = []
@@ -101,7 +75,7 @@ class AnthropicService(BaseLLMService):
                 filtered_messages.append(msg)
 
         params = {
-            "model": self.model_name,
+            "model": llm_config.model_name,
             "messages": filtered_messages,
         }
 
@@ -110,6 +84,6 @@ class AnthropicService(BaseLLMService):
 
         params.update(kwargs)
 
-        logger.info(f"Calling Anthropic API with model: {self.model_name}")
-        response = self._client.messages.create(**params)
+        logger.info(f"Calling Anthropic API with model: {llm_config.model_name}")
+        response: Message = self.client.messages.create(**params)
         return response.content[0].text

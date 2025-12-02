@@ -7,7 +7,7 @@ from typing import Literal
 
 from app.agent.signals import ActionSignal, AgentNode
 from app.agent.state import AgentState
-from app.config import get_logger
+from app.config import get_logger, settings
 
 logger = get_logger(__name__)
 
@@ -107,7 +107,10 @@ def route_after_code_execution(
     if signal == ActionSignal.CODE_EXECUTION_SUCCESS:
         logger.info("Code executed successfully, routing to CODE_PLANNING_NODE")
         return AgentNode.CODE_PLANNING
-    elif signal == ActionSignal.CODE_EXECUTION_FAILED and code_generation_attempts >= 3:
+    elif (
+        signal == ActionSignal.CODE_EXECUTION_FAILED
+        and code_generation_attempts >= settings.CODE_GENERATION_MAX_RETRIES
+    ):
         logger.info(
             f"Code executed with failure and max attempts reached ({code_generation_attempts}), routing to CODE_PLANNING_NODE for final decision"
         )

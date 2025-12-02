@@ -10,3 +10,6 @@ class LLMConfig(BaseModel):
         description="The LLM provider to use"
     )
     model_name: str = Field(description="The model name to use")
+    max_tokens: int = Field(
+        default=4096, description="The maximum number of tokens for the model response"
+    )

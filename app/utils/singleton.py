@@ -1,9 +1,10 @@
 """Thread-safe Singleton metaclass implementation."""
 
 import threading
+from abc import ABCMeta
 
 
-class SingletonMeta(type):
+class SingletonMeta(ABCMeta):
     """
     Thread-safe implementation of Singleton.
     Call setup_singleton() at startup to initialize the lock.

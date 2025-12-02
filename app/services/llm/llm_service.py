@@ -62,7 +62,7 @@ class LLMService:
                     f"Please ensure OPENAI_API_KEY is set and correct model name is used."
                 )
             logger.info(f"Using OpenAI service for model: {model_name}")
-            return OpenAIService(model_name=model_name)
+            return OpenAIService()
 
         elif provider == "anthropic":
             if not AnthropicService.is_supported(model_name):
@@ -71,7 +71,7 @@ class LLMService:
                     f"Please ensure ANTHROPIC_API_KEY is set and correct model name is used."
                 )
             logger.info(f"Using Anthropic service for model: {model_name}")
-            return AnthropicService(model_name=model_name)
+            return AnthropicService()
 
         else:
             raise ValueError(
@@ -93,7 +93,9 @@ class LLMService:
         Returns:
             str: The generated response text.
         """
-        return self.service.generate_response(messages=messages, **kwargs)
+        return self.service.generate_response(
+            llm_config=self.llm_config, messages=messages, **kwargs
+        )
 
     def generate_task_response(
         self,

@@ -10,7 +10,7 @@ This module implements the FST-based multi-stage architecture with the following
 
 from app.agent.signals import ActionSignal
 from app.agent.state import AgentState
-from app.config import get_logger
+from app.config import get_logger, settings
 from app.models.task import TaskResponse
 from app.services.executor_service import ExecutorService
 from app.services.llm.llm_service import LLMService
@@ -39,7 +39,7 @@ def planning_node(state: AgentState) -> dict:
     uploaded_files = state.get("uploaded_files", [])
     logger.info(f"Task: {task_description}")
 
-    llm_service = LLMService()
+    llm_service = LLMService(settings.PLANNING_LLM)
 
     decision = llm_service.generate_planning_decision(
         task_description=task_description,
@@ -105,7 +105,7 @@ def code_planning_node(state: AgentState) -> dict:
     logger.info(f"Step attempts: {step_attempts}")
     logger.info(f"Completed steps: {len(completed_steps)}")
 
-    if step_attempts > 5:
+    if step_attempts > settings.CODE_PLANNING_MAX_STEP_RETRIES:
         logger.warning("Exceeded maximum step attempts, marking task as failed")
         return {
             "action_signal": ActionSignal.TASK_FAILED,
@@ -113,7 +113,7 @@ def code_planning_node(state: AgentState) -> dict:
         }
 
     # Decide next action
-    llm_service = LLMService()
+    llm_service = LLMService(settings.CODE_PLANNING_LLM)
     decision = llm_service.generate_code_planning_decision(
         task_description=task_description,
         task_rationale=task_rationale,
@@ -234,7 +234,7 @@ def code_generation_node(state: AgentState) -> dict:
     logger.info("=== CODE_GENERATION_NODE ===")
     logger.info(f"Generating code for step: {current_step_goal}")
 
-    llm_service = LLMService()
+    llm_service = LLMService(settings.CODE_GENERATION_LLM)
 
     # Get previous code from completed steps for context
     notebook_code = ""
@@ -351,7 +351,7 @@ def answering_node(state: AgentState) -> dict:
     task_description = state.get("task_description", "")
     task_rationale = state.get("task_rationale", "")
 
-    llm_service = LLMService()
+    llm_service = LLMService(settings.ANSWERING_LLM)
 
     if action_signal == ActionSignal.CLARIFICATION:
         clarification = llm_service.generate_clarification_questions(
