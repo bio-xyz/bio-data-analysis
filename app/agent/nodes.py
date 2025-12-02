@@ -371,7 +371,10 @@ def answering_node(state: AgentState) -> dict:
             "task_response": TaskResponse(answer=general_answer, success=True),
             "action_signal": ActionSignal.FINAL_ANSWER,
         }
-    elif action_signal not in (ActionSignal.TASK_COMPLETED, ActionSignal.FINAL_ANSWER):
+    elif action_signal not in (
+        ActionSignal.TASK_COMPLETED,
+        ActionSignal.TASK_FAILED,
+    ):
         logger.error(
             f"ANSWERING_NODE reached with invalid action signal: {action_signal}"
         )

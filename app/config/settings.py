@@ -69,5 +69,10 @@ class Settings:
     )
     TASK_EXPIRY_SECONDS: int = int(os.getenv("TASK_EXPIRY_SECONDS", "300"))
 
+    # Sandbox Configuration
+    SANDBOX_DEFAULT_TIMEOUT_SECONDS: int = int(
+        os.getenv("SANDBOX_DEFAULT_TIMEOUT_SECONDS", "2400")
+    )
+
 
 settings = Settings()

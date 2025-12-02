@@ -14,3 +14,6 @@ wheels/
 
 # Ignore Test UI folder on main branch
 ui/
+
+# Ignore temporary files
+tmp/
