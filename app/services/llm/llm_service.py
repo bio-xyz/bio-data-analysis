@@ -1,12 +1,22 @@
 import json
 import uuid
-from typing import Dict, Optional
+from typing import Dict, Optional, Type, TypeVar
 
+import instructor
 from e2b_code_interpreter import Execution
 from e2b_code_interpreter.models import serialize_results
+from pydantic import BaseModel
 
 from app.config import get_logger, settings
 from app.models.llm_config import LLMConfig
+from app.models.structured_outputs import (
+    ClarificationResponse,
+    CodePlanningDecision,
+    GeneralAnswerResponse,
+    PlanningDecision,
+    PythonCode,
+    TaskResponseOutput,
+)
 from app.models.task import ArtifactResponse, TaskResponse
 from app.prompts import (
     build_code_generation_prompt,
@@ -27,6 +37,8 @@ from app.services.llm.base_llm_service import BaseLLMService
 from app.services.llm.openai_service import OpenAIService
 
 logger = get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class LLMService:
@@ -78,23 +90,38 @@ class LLMService:
                 f"Unsupported provider: {provider}. Supported providers: openai, anthropic"
             )
 
-    def _generate_response(
+    def _generate_structured(
         self,
         messages: list[Dict[str, str]],
+        response_model: Type[T],
+        mode: Optional[instructor.Mode] = None,
         **kwargs,
-    ) -> str:
+    ) -> T:
         """
-        Generate a response using the configured LLM provider.
+        Generate a structured response using instructor.
+
+        This is a unified API that works across both OpenAI and Anthropic providers.
 
         Args:
             messages: List of message dictionaries with 'role' and 'content' keys.
+            response_model: Pydantic model class for the expected response structure.
+            mode: Optional instructor mode. If not provided, uses provider-specific defaults:
+                  - OpenAI: instructor.Mode.TOOLS
+                  - Anthropic: instructor.Mode.ANTHROPIC_TOOLS
             **kwargs: Additional provider-specific parameters.
 
         Returns:
-            str: The generated response text.
+            T: An instance of the response_model with validated data.
         """
-        return self.service.generate_response(
-            llm_config=self.llm_config, messages=messages, **kwargs
+        call_kwargs = {**kwargs}
+        if mode is not None:
+            call_kwargs["mode"] = mode
+
+        return self.service.generate_structured(
+            llm_config=self.llm_config,
+            messages=messages,
+            response_model=response_model,
+            **call_kwargs,
         )
 
     def generate_task_response(
@@ -146,7 +173,6 @@ class LLMService:
                 result["chart"]["elements"] = " --- IGNORE --- "
             parsed_execution["artifacts"].append(result)
 
-        # Build the prompt
         system_prompt = get_task_response_system_prompt()
         user_prompt = build_task_response_prompt(
             task_description=task_description,
@@ -156,44 +182,29 @@ class LLMService:
             failure_reason=failure_reason,
         )
 
-        # Prepare messages
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-        # Generate response using the LLM
-        response_text = self._generate_response(messages=messages)
-        logger.debug(f"LLM Response Text: {response_text}")
-
-        # Parse JSON response
-        try:
-            response_data = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}")
-            logger.error(f"Response text: {response_text}")
-            # Fallback response
-            return TaskResponse(
-                answer="Task executed but unable to parse LLM response.",
-                artifacts=[],
-            )
-
-        # Extract markdown answer
-        answer = response_data.get("answer", "")
-        success = response_data.get("success", True)
+        response_output = self._generate_structured(
+            messages=messages,
+            response_model=TaskResponseOutput,
+        )
+        logger.debug(f"Task response output: {response_output}")
 
         artifacts = []
-        for artifact_data in response_data.get("artifacts", []):
+        for artifact_info in response_output.artifacts:
             content = ""
-            if artifact_data.get("id"):
-                content = mapped_results.get(artifact_data["id"], "")
+            if artifact_info.id:
+                content = mapped_results.get(artifact_info.id, "")
 
             artifact = ArtifactResponse(
-                description=artifact_data.get("description"),
-                type=artifact_data.get("type") or "unknown",
-                filename=artifact_data.get("filename"),
-                path=artifact_data.get("path"),
-                id=artifact_data.get("id") or str(uuid.uuid4()),
+                description=artifact_info.description,
+                type=artifact_info.type or "unknown",
+                filename=artifact_info.filename,
+                path=artifact_info.path,
+                id=artifact_info.id or str(uuid.uuid4()),
                 content=content,
             )
             artifacts.append(artifact)
@@ -201,9 +212,9 @@ class LLMService:
         logger.info(f"Generated response with {len(artifacts)} artifacts")
 
         return TaskResponse(
-            answer=answer,
+            answer=response_output.answer,
             artifacts=artifacts,
-            success=success,
+            success=response_output.success,
         )
 
     def generate_planning_decision(
@@ -211,7 +222,7 @@ class LLMService:
         task_description: str,
         data_files_description: str | None = None,
         uploaded_files: list[str] | None = None,
-    ) -> dict:
+    ) -> PlanningDecision:
         """
         Generate planning decision (PLANNING_NODE).
 
@@ -223,7 +234,7 @@ class LLMService:
             uploaded_files: Optional list of uploaded file names
 
         Returns:
-            dict: Planning decision with signal and rationale
+            PlanningDecision: Planning decision with signal and rationale
         """
         logger.info("Generating planning decision...")
 
@@ -239,20 +250,12 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        response_text = self._generate_response(messages=messages)
-        logger.debug(f"Planning decision response: {response_text}")
-
-        try:
-            result = json.loads(response_text)
-            logger.info(f"Planning decision: {result.get('signal')}")
-            return result
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse planning decision: {e}")
-            # Returning vague signal on parse error
-            return {
-                "signal": "PLANNING_PARSE_ERROR",
-                "rationale": task_description,
-            }
+        decision = self._generate_structured(
+            messages=messages,
+            response_model=PlanningDecision,
+        )
+        logger.info(f"Planning decision: {decision.signal}")
+        return decision
 
     def generate_code_planning_decision(
         self,
@@ -265,7 +268,7 @@ class LLMService:
         last_execution_output: str | None = None,
         last_execution_error: str | None = None,
         completed_steps: list[dict] | None = None,
-    ) -> dict:
+    ) -> CodePlanningDecision:
         """
         Generate code planning decision (CODE_PLANNING_NODE).
 
@@ -284,7 +287,7 @@ class LLMService:
             completed_steps: List of completed steps with results
 
         Returns:
-            dict: Decision with signal, current_step_goal, current_step_description, reasoning
+            CodePlanningDecision: Decision with signal, current_step_goal, current_step_description, reasoning
         """
         logger.info("Generating code planning decision...")
 
@@ -306,23 +309,12 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        response_text = self._generate_response(messages=messages)
-        logger.debug(f"Code planning decision response: {response_text}")
-
-        try:
-            result = json.loads(response_text)
-            logger.info(f"Code planning decision: {result.get('signal')}")
-            return result
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse code planning decision: {e}")
-            # Default to iterate on parse error
-            return {
-                "signal": "ITERATE_CURRENT_STEP",
-                "current_step_goal": current_step_goal or "",
-                "current_step_description": "",
-                "reasoning": "Parse error, defaulting to iterate",
-                "progress_summary": "",
-            }
+        decision = self._generate_structured(
+            messages=messages,
+            response_model=CodePlanningDecision,
+        )
+        logger.info(f"Code planning decision: {decision.signal}")
+        return decision
 
     def generate_step_code(
         self,
@@ -334,7 +326,7 @@ class LLMService:
         last_execution_error: str | None = None,
         notebook_code: str | None = None,
         previous_code: str | None = None,
-    ) -> str:
+    ) -> PythonCode:
         """
         Generate code for a specific step (CODE_GENERATION_NODE).
 
@@ -349,7 +341,7 @@ class LLMService:
             previous_code: Previously generated code for context
 
         Returns:
-            str: Generated Python code for the step
+            PythonCode: Generated Python code for the step (with code and optional reasoning)
         """
         logger.info(f"Generating code for step: {current_step_goal}")
 
@@ -370,16 +362,19 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        generated_code = self._generate_response(messages=messages)
-        logger.info(f"Generated step code length: {len(generated_code)} characters")
+        result = self._generate_structured(
+            messages=messages,
+            response_model=PythonCode,
+        )
+        logger.info(f"Generated step code length: {len(result.code)} characters")
 
-        return generated_code
+        return result
 
     def generate_clarification_questions(
         self,
         task_description: str,
         task_rationale: str,
-    ):
+    ) -> ClarificationResponse:
         """
         Generate clarification questions.
 
@@ -388,7 +383,7 @@ class LLMService:
             task_rationale: Rationale from planning node
 
         Returns:
-            str: Clarification questions
+            ClarificationResponse: Clarification questions to ask the user
         """
 
         logger.info("Generating clarification questions...")
@@ -404,19 +399,19 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        clarification = self._generate_response(messages=messages)
-        logger.debug(f"Clarification questions response: {clarification}")
-
-        return (
-            clarification
-            or "Your task could not be completed due to insufficient information. Please provide further details."
+        result = self._generate_structured(
+            messages=messages,
+            response_model=ClarificationResponse,
         )
+        logger.debug(f"Clarification questions response: {result.questions}")
+
+        return result
 
     def generate_general_answer(
         self,
         task_description: str,
         task_rationale: str,
-    ) -> str:
+    ) -> GeneralAnswerResponse:
         """
         Generate a general answer for the task.
 
@@ -424,7 +419,7 @@ class LLMService:
             task_description: Description of the task
             task_rationale: Rationale from planning node
         Returns:
-            str: General answer to the task
+            GeneralAnswerResponse: General answer to the task
         """
 
         logger.info("Generating general answer...")
@@ -440,7 +435,10 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        answer = self._generate_response(messages=messages)
-        logger.debug(f"General answer response: {answer}")
+        result = self._generate_structured(
+            messages=messages,
+            response_model=GeneralAnswerResponse,
+        )
+        logger.debug(f"General answer response: {result.answer}")
 
-        return answer or "Unable to provide an answer at this time."
+        return result

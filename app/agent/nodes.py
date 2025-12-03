@@ -11,6 +11,11 @@ This module implements the FST-based multi-stage architecture with the following
 from app.agent.signals import ActionSignal
 from app.agent.state import AgentState
 from app.config import get_logger, settings
+from app.models.structured_outputs import (
+    CodePlanningDecision,
+    PlanningDecision,
+    PythonCode,
+)
 from app.models.task import TaskResponse
 from app.services.executor_service import ExecutorService
 from app.services.llm.llm_service import LLMService
@@ -41,22 +46,21 @@ def planning_node(state: AgentState) -> dict:
 
     llm_service = LLMService(settings.PLANNING_LLM)
 
-    decision = llm_service.generate_planning_decision(
+    decision: PlanningDecision = llm_service.generate_planning_decision(
         task_description=task_description,
         data_files_description=data_files_description,
         uploaded_files=uploaded_files,
     )
 
-    signal = decision.get("signal", ActionSignal.CODE_PLANNING.name)
-    task_rationale = decision.get("rationale", task_description)
-
-    logger.info(f"Planning decision: {signal}")
+    logger.info(f"Planning decision: {decision.signal}")
 
     # Convert signal string to ActionSignal enum
-    action_signal = ActionSignal.from_string(signal, ActionSignal.CLARIFICATION)
+    action_signal = ActionSignal.from_string(
+        decision.signal, ActionSignal.CLARIFICATION
+    )
 
     return {
-        "task_rationale": task_rationale,
+        "task_rationale": decision.rationale,
         "action_signal": action_signal,
     }
 
@@ -114,7 +118,7 @@ def code_planning_node(state: AgentState) -> dict:
 
     # Decide next action
     llm_service = LLMService(settings.CODE_PLANNING_LLM)
-    decision = llm_service.generate_code_planning_decision(
+    decision: CodePlanningDecision = llm_service.generate_code_planning_decision(
         task_description=task_description,
         task_rationale=task_rationale,
         data_files_description=data_files_description,
@@ -126,15 +130,13 @@ def code_planning_node(state: AgentState) -> dict:
         completed_steps=completed_steps,
     )
 
-    # Parse decision
-    decision_signal = decision.get("signal", "ITERATE_CURRENT_STEP")
     new_action_signal = ActionSignal.from_string(
-        decision_signal, ActionSignal.ITERATE_CURRENT_STEP
+        decision.signal, ActionSignal.ITERATE_CURRENT_STEP
     )
-    new_step_goal = decision.get("current_step_goal", current_step_goal)
-    new_step_description = decision.get("current_step_description", "")
-    reasoning = decision.get("reasoning", "")
-    progress_summary = decision.get("progress_summary", "")
+    new_step_goal = decision.current_step_goal or current_step_goal
+    new_step_description = decision.current_step_description
+    reasoning = decision.reasoning
+    progress_summary = decision.progress_summary
 
     # Update world state
     updates = {
@@ -167,7 +169,9 @@ def code_planning_node(state: AgentState) -> dict:
         logger.info("Decided to PROCEED_TO_NEXT_STEP")
         updates.update(
             {
+                # Action
                 "action_signal": new_action_signal,
+                # Step configuration
                 "step_number": step_number + 1,
                 "current_step_goal": new_step_goal,
                 "current_step_description": new_step_description,
@@ -181,7 +185,7 @@ def code_planning_node(state: AgentState) -> dict:
         if new_action_signal == ActionSignal.TASK_FAILED:
             updates["failure_reason"] = reasoning
     else:
-        raise ValueError(f"Unknown decision signal: {decision_signal}")
+        raise ValueError(f"Unknown decision signal: {decision.signal}")
 
     if new_action_signal in (
         ActionSignal.PROCEED_TO_NEXT_STEP,
@@ -245,7 +249,7 @@ def code_generation_node(state: AgentState) -> dict:
             step_code = step.get("code", "")
             notebook_code += f"\n\n# Step {step_number}: {step_goal}\n{step_code}"
 
-    new_generated_code = llm_service.generate_step_code(
+    code_result: PythonCode = llm_service.generate_step_code(
         data_files_description=data_files_description,
         uploaded_files=uploaded_files,
         current_step_goal=current_step_goal,
@@ -256,11 +260,11 @@ def code_generation_node(state: AgentState) -> dict:
         previous_code=previous_code,
     )
 
-    logger.info(f"Generated code length: {len(new_generated_code)} characters")
-    logger.info(f"Code generated: {new_generated_code}...")
+    logger.info(f"Generated code length: {len(code_result.code)} characters")
+    logger.info(f"Code generated: {code_result.code}...")
 
     return {
-        "generated_code": new_generated_code,
+        "generated_code": code_result.code,
         "code_generation_attempts": code_generation_attempts + 1,
         "action_signal": ActionSignal.EXECUTE_CODE,
     }
@@ -354,21 +358,25 @@ def answering_node(state: AgentState) -> dict:
     llm_service = LLMService(settings.ANSWERING_LLM)
 
     if action_signal == ActionSignal.CLARIFICATION:
-        clarification = llm_service.generate_clarification_questions(
+        clarification_response = llm_service.generate_clarification_questions(
             task_description=task_description,
             task_rationale=task_rationale,
         )
         return {
-            "task_response": TaskResponse(answer=clarification, success=False),
+            "task_response": TaskResponse(
+                answer=clarification_response.questions, success=False
+            ),
             "action_signal": ActionSignal.FINAL_ANSWER,
         }
     elif action_signal == ActionSignal.GENERAL_ANSWER:
-        general_answer = llm_service.generate_general_answer(
+        general_answer_response = llm_service.generate_general_answer(
             task_description=task_description,
             task_rationale=task_rationale,
         )
         return {
-            "task_response": TaskResponse(answer=general_answer, success=True),
+            "task_response": TaskResponse(
+                answer=general_answer_response.answer, success=True
+            ),
             "action_signal": ActionSignal.FINAL_ANSWER,
         }
     elif action_signal not in (

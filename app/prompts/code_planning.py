@@ -65,15 +65,6 @@ Example simple step goals (these are just examples, exact step goals are very di
 - Clean the DataFrame by removing rows with missing values
 ... etc.
 
-Return your response as a JSON object:
-{
-    "signal": "ITERATE_CURRENT_STEP" | "PROCEED_TO_NEXT_STEP" | "TASK_COMPLETED" | "TASK_FAILED",
-    "current_step_goal": "Clear, small, specific goal for the current/next step (empty string if TASK_COMPLETED or TASK_FAILED)",
-    "current_step_description": "Detailed description of what needs to be done (empty string if TASK_COMPLETED or TASK_FAILED) in markdown format",
-    "reasoning": "Explanation of why this decision was made",
-    "progress_summary": "Brief summary of overall progress so far",
-}
-
 CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences. Markdown is only allowed INSIDE current_step_description field.
 """
 

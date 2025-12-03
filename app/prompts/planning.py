@@ -42,12 +42,6 @@ When choosing GENERAL_ANSWER, provide:
 When choosing CLARIFICATION, provide:
 - Reason why more information is needed
 
-Return your response as a JSON object:
-{
-    "signal": "CODE_PLANNING" | "GENERAL_ANSWER" | "CLARIFICATION",
-    "rationale": "Detailed explanation of the task for CODE_PLANNING, OR reason for choosing GENERAL_ANSWER OR reason for choosing CLARIFICATION.",
-}
-
 CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 """
 

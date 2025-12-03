@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, Type, TypeVar
 
+import instructor
 from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+from pydantic import BaseModel
 
 from app.config import get_logger, settings
 from app.models.llm_config import LLMConfig
@@ -9,6 +10,8 @@ from app.services.llm.base_llm_service import BaseLLMService
 from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
@@ -45,31 +48,44 @@ class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
         model_lower = model_name.lower()
         return any(pattern in model_lower for pattern in cls.SUPPORTED_PATTERNS)
 
-    def generate_response(
+    def generate_structured(
         self,
         llm_config: LLMConfig,
         messages: list[Dict[str, str]],
+        response_model: Type[T],
+        mode: instructor.Mode = instructor.Mode.JSON,
         **kwargs,
-    ) -> str:
+    ) -> T:
         """
-        Generate a response using OpenAI API.
+        Generate a structured response using instructor.
 
         Args:
             llm_config: Configuration for the LLM model.
             messages: List of message dictionaries with 'role' and 'content' keys.
-            **kwargs: Additional OpenAI-specific parameters (e.g., top_p, frequency_penalty).
+            response_model: Pydantic model class for the expected response structure.
+            mode: Instructor mode for structured output extraction.
+                  Options: TOOLS, JSON (default), MD_JSON, FUNCTIONS.
+            **kwargs: Additional OpenAI-specific parameters.
 
         Returns:
-            str: The generated response text.
+            T: An instance of the response_model with validated data.
         """
+        # Create a new instructor client with the specified mode
+        instructor_client = instructor.from_openai(self.client, mode=mode)
+
         params = {
             "model": llm_config.model_name,
             "max_completion_tokens": llm_config.max_tokens,
             "messages": messages,
+            "response_model": response_model,
         }
 
         params.update(kwargs)
 
-        logger.info(f"Calling OpenAI API with model: {llm_config.model_name}")
-        response: ChatCompletion = self.client.chat.completions.create(**params)
-        return response.choices[0].message.content
+        logger.info(
+            f"Calling OpenAI API (structured) with model: {llm_config.model_name}, "
+            f"response_model: {response_model.__name__}, mode: {mode}"
+        )
+
+        response: T = instructor_client.chat.completions.create(**params)
+        return response

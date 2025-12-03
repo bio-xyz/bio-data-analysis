@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, Type, TypeVar
 
+import instructor
 from anthropic import Anthropic
-from anthropic.types.message import Message
+from pydantic import BaseModel
 
 from app.config import get_logger, settings
 from app.models.llm_config import LLMConfig
@@ -9,6 +10,8 @@ from app.services.llm.base_llm_service import BaseLLMService
 from app.utils import SingletonMeta
 
 logger = get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class AnthropicService(BaseLLMService, metaclass=SingletonMeta):
@@ -47,44 +50,43 @@ class AnthropicService(BaseLLMService, metaclass=SingletonMeta):
         model_lower = model_name.lower()
         return any(pattern in model_lower for pattern in cls.SUPPORTED_PATTERNS)
 
-    def generate_response(
+    def generate_structured(
         self,
         llm_config: LLMConfig,
         messages: list[Dict[str, str]],
+        response_model: Type[T],
+        mode: instructor.Mode = instructor.Mode.ANTHROPIC_JSON,
         **kwargs,
-    ) -> str:
+    ) -> T:
         """
-        Generate a response using Anthropic API.
+        Generate a structured response using instructor.
 
         Args:
             llm_config: Configuration for the LLM model.
             messages: List of message dictionaries with 'role' and 'content' keys.
+            response_model: Pydantic model class for the expected response structure.
+            mode: Instructor mode for structured output extraction.
+                  Options: ANTHROPIC_TOOLS, ANTHROPIC_JSON (default).
             **kwargs: Additional Anthropic-specific parameters.
 
         Returns:
-            str: The generated response text.
+            T: An instance of the response_model with validated data.
         """
-        # Anthropic requires system messages to be separate
-        system_message = None
-        filtered_messages = []
-
-        for msg in messages:
-            if msg["role"] == "system":
-                system_message = msg["content"]
-            else:
-                filtered_messages.append(msg)
+        instructor_client = instructor.from_anthropic(self.client, mode=mode)
 
         params = {
             "model": llm_config.model_name,
             "max_tokens": llm_config.max_tokens,
-            "messages": filtered_messages,
+            "messages": messages,
+            "response_model": response_model,
         }
-
-        if system_message:
-            params["system"] = system_message
 
         params.update(kwargs)
 
-        logger.info(f"Calling Anthropic API with model: {llm_config.model_name}")
-        response: Message = self.client.messages.create(**params)
-        return response.content[0].text
+        logger.info(
+            f"Calling Anthropic API (structured) with model: {llm_config.model_name}, "
+            f"response_model: {response_model.__name__}, mode: {mode}"
+        )
+
+        response: T = instructor_client.messages.create(**params)
+        return response
