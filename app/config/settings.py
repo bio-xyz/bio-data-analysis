@@ -33,6 +33,8 @@ class Settings:
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     ANTHROPIC_CUSTOM_BASE_URL: Optional[str] = os.getenv("ANTHROPIC_CUSTOM_BASE_URL")
 
+    GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
+
     # Default LLM Config
     DEFAULT_LLM: LLMConfig = LLMConfig(
         provider=os.getenv("DEFAULT_PROVIDER", "openai"),

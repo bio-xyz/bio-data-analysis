@@ -79,9 +79,8 @@ class AnthropicService(BaseLLMService, metaclass=SingletonMeta):
             "max_tokens": llm_config.max_tokens,
             "messages": messages,
             "response_model": response_model,
+            **kwargs,
         }
-
-        params.update(kwargs)
 
         logger.info(
             f"Calling Anthropic API (structured) with model: {llm_config.model_name}, "

@@ -1,7 +1,7 @@
 from typing import Dict, Type, TypeVar
 
 import instructor
-from openai import OpenAI
+from google import genai
 from pydantic import BaseModel
 
 from app.config import get_logger, settings
@@ -14,35 +14,33 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
-class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
-    """OpenAI LLM service implementation."""
+class GoogleService(BaseLLMService, metaclass=SingletonMeta):
+    """Google Google LLM service implementation."""
 
-    # Supported OpenAI model patterns
-    SUPPORTED_PATTERNS = ["gpt", "openai", "o1", "o3", "text-davinci"]
+    # Supported Google model patterns
+    SUPPORTED_PATTERNS = ["google", "gemini"]
 
     def __init__(self):
-        if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY must be set to instantiate OpenAI client")
+        if not settings.GOOGLE_API_KEY:
+            raise ValueError("GOOGLE_API_KEY must be set to instantiate Google client")
 
-        client_kwargs = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_CUSTOM_BASE_URL:
-            client_kwargs["base_url"] = settings.OPENAI_CUSTOM_BASE_URL
+        client_kwargs = {"api_key": settings.GOOGLE_API_KEY}
 
-        self.client = OpenAI(**client_kwargs)
-        logger.info("OpenAI client instantiated successfully")
+        self.client = genai.Client(**client_kwargs)
+        logger.info("Google client instantiated successfully")
 
     @classmethod
     def is_supported(cls, model_name: str) -> bool:
         """
-        Check if OpenAI is supported for the given model.
+        Check if Google is supported for the given model.
 
         Args:
             model_name: The name of the model to check.
 
         Returns:
-            bool: True if OpenAI API key is set and model matches OpenAI patterns.
+            bool: True if Google API key is set and model matches Google patterns.
         """
-        if not settings.OPENAI_API_KEY:
+        if not settings.GOOGLE_API_KEY:
             return False
 
         model_lower = model_name.lower()
@@ -53,7 +51,7 @@ class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
         llm_config: LLMConfig,
         messages: list[Dict[str, str]],
         response_model: Type[T],
-        mode: instructor.Mode = instructor.Mode.JSON,
+        mode: instructor.Mode = instructor.Mode.GENAI_STRUCTURED_OUTPUTS,
         **kwargs,
     ) -> T:
         """
@@ -64,27 +62,28 @@ class OpenAIService(BaseLLMService, metaclass=SingletonMeta):
             messages: List of message dictionaries with 'role' and 'content' keys.
             response_model: Pydantic model class for the expected response structure.
             mode: Instructor mode for structured output extraction.
-                  Options: TOOLS, JSON (default), MD_JSON, FUNCTIONS.
-            **kwargs: Additional OpenAI-specific parameters.
+                  Options: GENAI_STRUCTURED_OUTPUTS (default), GENAI_TOOLS.
+            **kwargs: Additional Google-specific parameters.
 
         Returns:
             T: An instance of the response_model with validated data.
         """
-        # Create a new instructor client with the specified mode
-        instructor_client = instructor.from_openai(self.client, mode=mode)
+        instructor_client = instructor.from_genai(self.client, mode=mode)
 
         params = {
             "model": llm_config.model_name,
-            "max_completion_tokens": llm_config.max_tokens,
             "messages": messages,
             "response_model": response_model,
-            **kwargs,
+            "generation_config": {
+                "max_tokens": llm_config.max_tokens,
+                **kwargs,
+            },
         }
 
         logger.info(
-            f"Calling OpenAI API (structured) with model: {llm_config.model_name}, "
+            f"Calling Google API (structured) with model: {llm_config.model_name}, "
             f"response_model: {response_model.__name__}, mode: {mode}"
         )
 
-        response: T = instructor_client.chat.completions.create(**params)
+        response: T = instructor_client.messages.create(**params)
         return response

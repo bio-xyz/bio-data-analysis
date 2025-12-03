@@ -34,6 +34,7 @@ from app.prompts import (
 )
 from app.services.llm.anthropic_service import AnthropicService
 from app.services.llm.base_llm_service import BaseLLMService
+from app.services.llm.google_service import GoogleService
 from app.services.llm.openai_service import OpenAIService
 
 logger = get_logger(__name__)
@@ -85,9 +86,18 @@ class LLMService:
             logger.info(f"Using Anthropic service for model: {model_name}")
             return AnthropicService()
 
+        elif provider == "google":
+            if not GoogleService.is_supported(model_name):
+                raise ValueError(
+                    f"Google provider is not properly configured. "
+                    f"Please ensure GOOGLE_API_KEY is set and correct model name is used."
+                )
+            logger.info(f"Using Google service for model: {model_name}")
+            return GoogleService()
+
         else:
             raise ValueError(
-                f"Unsupported provider: {provider}. Supported providers: openai, anthropic"
+                f"Unsupported provider: {provider}. Supported providers: openai, anthropic, google"
             )
 
     def _generate_structured(
