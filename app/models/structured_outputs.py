@@ -1,6 +1,6 @@
 """Structured output models for instructor-based LLM responses."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ class PythonCode(BaseModel):
     code: str = Field(
         ...,
         description=(
-            "Pure executable Python code. Must NOT contain markdown code fences "
+            "CRITICAL: Pure executable Python code. Must NOT contain markdown code fences "
             "(```python or ```), backticks, or any other formatting. "
             "Should be directly executable as-is."
         ),
@@ -63,28 +63,24 @@ class CodePlanningDecision(BaseModel):
     )
 
 
-class ArtifactInfo(BaseModel):
-    """Model for artifact information."""
+class ArtifactDecision(BaseModel):
+    """Model for artifact selection decision."""
 
-    id: Optional[str] = Field(
-        default=None,
-        description="Unique identifier for the artifact if not saved on disk, e.g., in-memory artifact",
+    type: Literal["FOLDER", "FILE"] = Field(
+        ...,
+        description="Type of artifact: FOLDER or FILE",
     )
-    type: str = Field(
-        default="unknown",
-        description="Type of artifact (png|chart|table|csv|json|text|plot)",
+    description: str = Field(
+        ...,
+        description="Description of the generated artifact",
     )
-    description: Optional[str] = Field(
-        default=None,
-        description="Description of the saved or execution result artifact",
-    )
-    filename: str = Field(default=None, description="Artifact filename")
-    path: Optional[str] = Field(
-        default=None, description="Path to the artifact if applicable and saved on disk"
+    full_path: str = Field(
+        ...,
+        description="Full path to the generated artifact. For FOLDER, provide the full folder path; for FILE, provide full path to the file",
     )
 
 
-class TaskResponseOutput(BaseModel):
+class TaskResponseAnswer(BaseModel):
     """Model for task response output."""
 
     answer: str = Field(
@@ -97,9 +93,9 @@ class TaskResponseOutput(BaseModel):
         default=True,
         description="Whether the task was completed successfully",
     )
-    artifacts: list[ArtifactInfo] = Field(
+    artifacts: list[ArtifactDecision] = Field(
         default_factory=list,
-        description="List of artifacts generated during the task. Can be empty if no artifacts were created or if user did not request them.",
+        description="List of artifacts generated during the task. Can be empty if no artifacts were created or if user did not request them",
     )
 
 

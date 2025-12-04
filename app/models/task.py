@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 from fastapi import Form
 from pydantic import BaseModel, Field, field_validator
@@ -21,6 +22,18 @@ class TaskRequest(BaseModel):
         "",
         description="Optional description of the provided data files",
     )
+    base_path: str = Field(
+        "",
+        description="Optional base path of files in the provided file paths",
+    )
+    file_paths: list[str] = Field(
+        [],
+        description="Full paths to the files to be used in the task",
+    )
+    target_path: Optional[str] = Field(
+        None,
+        description="Optional target path where the agent should save output files",
+    )
 
     @field_validator("task_description")
     @classmethod
@@ -34,46 +47,52 @@ class TaskRequest(BaseModel):
         cls,
         task_description: str = Form(...),
         data_files_description: str = Form(""),
+        base_path: str = Form(""),
+        file_paths: list[str] = Form(default=None),
+        target_path: Optional[str] = Form(default=None),
     ):
         return cls(
             task_description=task_description,
             data_files_description=data_files_description,
+            base_path=base_path,
+            file_paths=file_paths or [],
+            target_path=target_path,
         )
 
 
 class ArtifactResponse(BaseModel):
+    id: str = Field(
+        ...,
+        description="Unique identifier for the artifact if applicable",
+    )
     description: str = Field(
-        "",
+        ...,
         description="Description of the artifact generated during task execution",
     )
     type: str = Field(
-        "",
-        description="Type of the artifact, e.g., 'image', 'table', 'text', 'csv', 'json', 'plot', 'chart'",
+        ...,
+        description="Type of the artifact, e.g 'FILE', 'FOLDER'",
     )
-    content: str = Field(
-        "",
+    content: Optional[str] = Field(
+        None,
         description="Content (base64) or reference to the artifact generated during task execution",
     )
-    filename: str | None = Field(
+    name: Optional[str] = Field(
         None,
-        description="Filename of the artifact generated during task execution",
+        description="Name of the artifact generated during task execution",
     )
-    path: str | None = Field(
+    path: Optional[str] = Field(
         None,
         description="Path to the artifact file if applicable",
-    )
-    id: str | None = Field(
-        None,
-        description="Unique identifier for the artifact if applicable",
     )
 
 
 class TaskResponse(BaseModel):
-    id: str | None = Field(
+    id: Optional[str] = Field(
         None,
         description="Unique identifier for the task",
     )
-    status: TaskStatus | None = Field(
+    status: Optional[TaskStatus] = Field(
         None,
         description="Current status of the task",
     )
@@ -108,11 +127,13 @@ class TaskInfo:
     def __init__(self, task_id: str, status: TaskStatus):
         self.task_id = task_id
         self.status = status
-        self.response: TaskResponse | None = None
+        self.response: Optional[TaskResponse] = None
         self.updated_at = datetime.now()
         self.created_at = datetime.now()
 
-    def update_status(self, status: TaskStatus, response: TaskResponse | None = None):
+    def update_status(
+        self, status: TaskStatus, response: Optional[TaskResponse] = None
+    ):
         self.status = status
         if response:
             self.response = response

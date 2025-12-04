@@ -1,6 +1,7 @@
 """Action signal and node name definitions for the agent graph."""
 
 from enum import Enum
+from typing import Optional
 
 
 class AgentNode(str, Enum):
@@ -59,5 +60,5 @@ class ActionSignal(str, Enum):
     @classmethod
     def from_string(
         cls, signal: str, default: "ActionSignal" = None
-    ) -> "ActionSignal | None":
+    ) -> Optional["ActionSignal"]:
         return cls.__members__.get(signal, default)

@@ -1,7 +1,9 @@
 import asyncio
 import base64
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import nbformat
@@ -9,11 +11,17 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.agent import AgentGraph, AgentState
 from app.config import get_logger, settings
-from app.models.task import TaskInfo, TaskRequest, TaskResponse, TaskStatus
+from app.models.structured_outputs import ArtifactDecision
+from app.models.task import (
+    ArtifactResponse,
+    TaskInfo,
+    TaskRequest,
+    TaskResponse,
+    TaskStatus,
+)
 from app.services.executor_service import ExecutorService
 from app.utils import SingletonMeta
 from app.utils.datafile import DataFile
-from app.utils.nb_builder import NotebookBuilder
 
 logger = get_logger(__name__)
 
@@ -29,9 +37,9 @@ class TaskService(metaclass=SingletonMeta):
 
     def process_task(
         self,
+        task_id: str,
         task: TaskRequest,
         data_files: list[DataFile],
-        task_id: str,
     ) -> TaskResponse:
         """
         Process the given task with optional data files using LangGraph workflow.
@@ -43,6 +51,7 @@ class TaskService(metaclass=SingletonMeta):
             5. Collect and return the final task response including any artifacts.
 
         Args:
+            task_id (str): Task ID for tracking and status updates.
             task (TaskRequest): The task request containing the task description and data files description.
             data_files (list[DataFile]): List of data files to be uploaded to the sandbox
             task_id (str): Task ID for tracking and status updates.
@@ -60,9 +69,25 @@ class TaskService(metaclass=SingletonMeta):
         sandbox_id = self.executor_service.create_sandbox()
 
         try:
-            uploaded_files = self.executor_service.upload_data_files(
-                sandbox_id, data_files
-            )
+            uploaded_files = []
+
+            if data_files:
+                uploaded_files = self.executor_service.upload_data_files(
+                    sandbox_id, data_files
+                )
+
+            if task.file_paths and settings.FILE_STORAGE_ENABLED:
+                full_file_paths = [
+                    os.path.join(task.base_path, fp) for fp in task.file_paths
+                ]
+
+                self.executor_service.mount_s3_bucket(sandbox_id)
+                copied_files = self.executor_service.copy_from_mount(
+                    sandbox_id, full_file_paths
+                )
+                self.executor_service.unmount_s3_bucket(sandbox_id)
+
+                uploaded_files.extend(copied_files)
 
             # Initialize the agent state
             initial_state = AgentState(
@@ -81,17 +106,20 @@ class TaskService(metaclass=SingletonMeta):
             )
 
             logger.info("LangGraph execution completed")
-            logger.debug(f"Final state: {final_state}")
 
             # Extract task response from final state
-            task_response = final_state["task_response"]
+            task_answer = final_state["task_answer"]
 
-            # Download artifact contents
-            for artifact in task_response.artifacts:
-                if artifact.path:
-                    artifact.content = base64.b64encode(
-                        self.executor_service.download_file(sandbox_id, artifact.path)
-                    ).decode("utf-8")
+            # Prepare artifacts
+            artifacts = self.prepare_artifacts(
+                sandbox_id, task_id, task.base_path, task_answer.artifacts
+            )
+
+            task_response = TaskResponse(
+                answer=task_answer.answer,
+                success=task_answer.success,
+                artifacts=artifacts,
+            )
 
         finally:
             self.executor_service.destroy_sandbox(sandbox_id)
@@ -103,6 +131,78 @@ class TaskService(metaclass=SingletonMeta):
         self.update_task_status(task_id, TaskStatus.COMPLETED, task_response)
 
         return task_response
+
+    def prepare_artifacts(
+        self,
+        sandbox_id: str,
+        task_id: str,
+        base_path: Optional[str],
+        artifacts: list[ArtifactDecision],
+    ) -> list[ArtifactResponse]:
+        """
+        Prepare artifacts from the sandbox for the task response.
+
+        Args:
+            sandbox_id: The sandbox ID
+            task_id: The task ID
+            base_path: The base path for file storage
+            artifacts: List of artifacts to prepare
+
+        Returns:
+            list[ArtifactResponse]: List of prepared artifact responses
+        """
+        base_path = Path(base_path)
+        task_path = Path(f"task/{task_id}")
+        artifact_responses: list[ArtifactResponse] = []
+
+        mount_available = artifacts and base_path and settings.FILE_STORAGE_ENABLED
+        if mount_available:
+            self.executor_service.mount_s3_bucket(sandbox_id)
+
+        for artifact in artifacts:
+            if not self.executor_service.path_exists(sandbox_id, artifact.full_path):
+                logger.warning(f"Artifact path does not exist: {artifact.full_path}")
+                continue
+
+            artifact_id = str(uuid.uuid4())
+            # Full path in the sandbox
+            artifact_full_path = Path(artifact.full_path)
+            # Relative path in the sandbox
+            relative_path = artifact_full_path.relative_to(
+                settings.DEFAULT_WORKING_DIRECTORY
+            )
+
+            if base_path and settings.FILE_STORAGE_ENABLED:
+                # Path in the S3 mount relative to base_path
+                artifact_path = str(task_path / relative_path)
+                content = None
+                # Use full qualified path in S3 mount to destination folder
+                self.executor_service.move_to_mount(
+                    sandbox_id,
+                    artifact_full_path,
+                    base_path / task_path / relative_path,
+                )
+            else:
+                # Relative path within the sandbox
+                artifact_path = str(relative_path)
+                content = base64.b64encode(
+                    self.executor_service.download_file(sandbox_id, artifact.full_path)
+                ).decode("utf-8")
+
+            artifact_response = ArtifactResponse(
+                id=artifact_id,
+                description=artifact.description,
+                type=artifact.type,
+                name=artifact_full_path.name,
+                path=artifact_path,
+                content=content,
+            )
+            artifact_responses.append(artifact_response)
+
+        if mount_available:
+            self.executor_service.unmount_s3_bucket(sandbox_id)
+
+        return artifact_responses
 
     def create_task(self) -> str:
         """
@@ -166,7 +266,7 @@ class TaskService(metaclass=SingletonMeta):
         task_id = self.create_task()
 
         try:
-            return self.process_task(task, data_files, task_id)
+            return self.process_task(task_id, task, data_files)
         except Exception as e:
             logger.error(f"Sync task {task_id} failed: {str(e)}", exc_info=True)
             self.update_task_status(
@@ -187,7 +287,7 @@ class TaskService(metaclass=SingletonMeta):
         """
         try:
             logger.info(f"Starting async task processing for {task_id}")
-            self.process_task(task, data_files, task_id)
+            self.process_task(task_id, task, data_files)
             logger.info(f"Async task {task_id} completed successfully")
         except Exception as e:
             logger.error(f"Async task {task_id} failed: {str(e)}", exc_info=True)

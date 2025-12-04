@@ -1,5 +1,7 @@
 """Prompts for the CODE_PLANNING_NODE - manages step-by-step code execution planning."""
 
+from typing import Optional
+
 
 def get_code_planning_system_prompt() -> str:
     """Get the system prompt for the code planning node."""
@@ -72,13 +74,13 @@ CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 def build_code_planning_prompt(
     task_description: str,
     task_rationale: str,
-    data_files_description: str | None = None,
-    uploaded_files: list[str] | None = None,
-    current_step_goal: str | None = None,
-    current_step_goal_history: list[str] | None = None,
-    last_execution_output: str | None = None,
-    last_execution_error: str | None = None,
-    completed_steps: list[dict] | None = None,
+    data_files_description: Optional[str] = None,
+    uploaded_files: Optional[list[str]] = None,
+    current_step_goal: Optional[str] = None,
+    current_step_goal_history: Optional[list[str]] = None,
+    last_execution_output: Optional[str] = None,
+    last_execution_error: Optional[str] = None,
+    completed_steps: Optional[list[dict]] = None,
 ) -> str:
     """
     Build the user prompt for the code planning node.

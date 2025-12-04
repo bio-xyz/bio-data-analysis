@@ -1,5 +1,7 @@
 """Prompts for the PLANNING_NODE - entry point that decides between code execution and direct answer."""
 
+from typing import Optional
+
 
 def get_planning_system_prompt() -> str:
     """Get the system prompt for the planning node."""
@@ -48,8 +50,8 @@ CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 
 def build_planning_prompt(
     task_description: str,
-    data_files_description: str | None = None,
-    uploaded_files: list[str] | None = None,
+    data_files_description: Optional[str] = None,
+    uploaded_files: Optional[list[str]] = None,
 ) -> str:
     """
     Build the user prompt for the planning node.

@@ -54,10 +54,15 @@ class Settings:
     # Answering Node LLM Config
     ANSWERING_LLM: LLMConfig = _get_llm_config("ANSWERING", DEFAULT_LLM)
 
+    # File and Directory Configuration
     DEFAULT_WORKING_DIRECTORY: str = os.getenv(
         "DEFAULT_WORKING_DIRECTORY", "/home/user"
     )
     DEFAULT_DATA_DIRECTORY: str = os.getenv("DEFAULT_DATA_DIRECTORY", "/home/user/data")
+    DEFAULT_MOUNT_DIRECTORY: str = os.getenv("DEFAULT_MOUNT_DIRECTORY", "/mnt/s3bucket")
+    DEFAULT_NOTEBOOK_FILENAME: str = os.getenv(
+        "DEFAULT_NOTEBOOK_FILENAME", "notebook.ipynb"
+    )
 
     # File Upload Configuration
     MAX_FILE_SIZE: int = (
@@ -82,6 +87,19 @@ class Settings:
     SANDBOX_DEFAULT_TIMEOUT_SECONDS: int = int(
         os.getenv("SANDBOX_DEFAULT_TIMEOUT_SECONDS", "2400")
     )
+    SANDBOX_TEMPLATE: str = os.getenv("SANDBOX_TEMPLATE", "code-interpreter-v1")
+    DEFAULT_TARGET_PATH: str = os.getenv("DEFAULT_TARGET_PATH")
+
+    # File storage configuration
+    FILE_STORAGE_ENABLED: bool = (
+        os.getenv("FILE_STORAGE_ENABLED", "false").lower() == "true"
+    )
+
+    # S3 Configuration
+    S3_BUCKET: str = os.getenv("S3_BUCKET")
+    S3_ACCESS_KEY_ID: str = os.getenv("S3_ACCESS_KEY_ID")
+    S3_SECRET_ACCESS_KEY: str = os.getenv("S3_SECRET_ACCESS_KEY")
+    S3_ENDPOINT: Optional[str] = os.getenv("S3_ENDPOINT")
 
 
 settings = Settings()

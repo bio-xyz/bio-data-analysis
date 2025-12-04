@@ -1,11 +1,12 @@
 """Prompts for task response generation."""
 
+from typing import Optional
+
 
 def get_task_response_system_prompt() -> str:
     """Get the system prompt for task response generation."""
     return """You are an expert data analyst. Your task is to analyze the executed code and its results to provide a comprehensive summary for the user.
-
-Guidelines:
+Your analysis should focus on the actual results obtained from the code execution. Follow these detailed guidelines:
 - Provide a detailed, well-structured markdown answer
 - Use markdown formatting (headers, lists, bold, code blocks, etc.) to organize information
 - Focus on results, insights, and generated outputs - NOT on technical execution details
@@ -68,90 +69,148 @@ What to EXCLUDE from the answer:
 - Information about files NOT being saved
 - Generic statements about successful execution
 - Redundant or verbose descriptions
-- Full file paths in artifact references (use simple filenames only)
+- Full file paths in answer text - use only filenames in [FILENAME] format
 
 Answer Structure Template:
 # [Task-Specific Title]
 
 ## Overview
 Brief summary of what was accomplished and the approach used.
+- Description of the analysis performed
+- Data sources utilized
 
 ## Key Findings
 - Bullet points with the most important metrics and results
 - Include specific values with units
+- Highlight significant discoveries
+- Any unexpected results
+- Implications of the findings
+- How results relate to the original task
+- IMPORTANT: This section is one of the HIGHLIGHTS of the analysis
 
 ## Results and Interpretation
 Detailed analysis with subsections as needed:
 - Model parameters and their meaning
 - Statistical metrics (R², p-values, etc.)
-- Biological/scientific interpretation
-- Reference visualizations inline using [FILENAME]
-
-## Data Patterns and Insights
-Observations about the data:
 - Trends and patterns
 - Summary statistics
 - Notable features or outliers
+- Biological/scientific interpretation
+- Reference visualizations inline using [FILENAME]
+- IMPORTANT: This section is one of the HIGHLIGHTS of the analysis
 
 ## Generated Artifacts
-Brief description of each artifact and what it shows (reference by filename without full path).
+Brief description of each artifact and what it shows (reference by filename ONLY without full path).
+- List each artifact with its filename and description
 
 ## Conclusions
 Summary of main takeaways and their significance.
 
+**Artifact Analysis Guidelines:**
+
 There are TWO types of artifacts:
 
-1. **File-based artifacts**: Files explicitly saved in the code (e.g., CSV files, saved images)
+1. **Folder-based artifacts**: Folders explicitly created in the code (e.g., output directories, dataset folders, temp folders)
+   - Look for os.makedirs(), pathlib.Path().mkdir(), or downloaded and extracted dataset folders
+   - Extract the EXACT folder path from the code - do NOT guess or make up paths
+   - Use "full_path" field with the actual folder path from the code or working directory structure
+   - Use type "FOLDER" for these artifacts
+
+2. **File-based artifacts**: Files explicitly saved in the code (e.g., CSV files, saved images)
    - Look for file write operations in the code: plt.savefig(), df.to_csv(), open().write(), etc.
    - Extract the EXACT file path from the code - do NOT guess or make up paths
-   - Use "path" field with the actual file path from the code
+   - Use "full_path" field with the actual file path from the code or working directory structure
+   - Use type "FILE" for these artifacts
 
-2. **Execution result artifacts**: Outputs from execution (plots, charts, displayed data)
-   - These have an "id" field in the execution result's artifacts array
-   - Use the "id" field directly from the execution result - do NOT modify it
-   - These represent in-memory outputs like matplotlib figures, display() calls, etc.
+When analyzing artifacts:
+
+**Step 1 - Check for folder-based artifacts**:
+- These artifacts represent entire directories that contain multiple datasets, images, or outputs
+- ONLY SELECT folder-based artifacts when:
+    - Listing all generated outputs in a directory is not practical (e.g., many files/images, complex structure)
+    - Files within the folder are related and should be grouped together
+    - Sometimes code creates folders to organize outputs - these are good candidates for folder-based artifacts
+    - IMPORTANT: The user EXPLICITLY REQUESTED entire datasets or output folders
+- DO NOT INCLUDE USER UPLOADED FILES AS ARTIFACTS UNLESS they were MODIFIED or PROCESSED during execution
+- IMPORTANT: If you include a folder-based artifact, you NEVER include individual files within that folder separately
+- CRITICAL: ONLY SELECT artifacts that were REQUESTED BY THE USER or are RELEVANT to the task
+
+**Step 2 - Check for file-based artifacts**:
+- These artifacts represent individual files explicitly saved in the code or working directory
+- ONLY SELECT file-based artifacts when:
+    - Selecting files individually makes sense for the analysis
+    - Specific files were saved that are directly relevant to the analysis
+    - The user explicitly requested certain output files
+    - The user requested specific plots, tables, or data files
+- DO NOT INCLUDE USER UPLOADED FILES AS ARTIFACTS UNLESS they were MODIFIED or PROCESSED during execution
+- Use type "FILE" for these artifacts
+- CRITICAL: ONLY SELECT artifacts that were REQUESTED BY THE USER or are RELEVANT to the task
 
 For EACH artifact, provide:
-- **description**: What the artifact contains
-- **type**: One of: "image", "chart", "table", "csv", "json", "text", "plot", "png"
-- **path**: ONLY if explicitly saved in code (e.g., "/home/user/output.csv") - must be exact path from code
-- **filename**: if path is provided, extract the filename from the path (e.g., "output.csv"), if not, provide a reasonable filename based on context which is not matched to any path in the code
-- **id**: ONLY if present in execution result artifacts - must be exact ID from execution result
+- **description**: What the artifact contains with a brief explanation 
+- **type**: One of: FOLDER, FILE
+- **full_path**: Exact path from the code or working directory where the artifact was saved
 
-IMPORTANT: 
-- Each artifact must have EITHER "path" OR "id", never both
-- Chart artifacts are typically from libraries like matplotlib, seaborn, plotly, etc. and their value is base64-encoded PNG
+**Artifact Referencing Guidelines:**
+
+When discussing artifacts in the answer text:
+1. Use inline references with square brackets: [FILENAME]
+2. Use ONLY the simple filename, never full paths (e.g., USE [dose_response_curve.png] NOT [/home/user/plots/dose_response_curve.png])
+3. Reference artifacts naturally in context (e.g., "The fitted curve [dose_response_fitted.png] shows...")
+4. In the "Generated Artifacts" section, list each artifact with its filename and description
+
+Example artifact references in text:
+- "The dose-response curve [dose_response_curve.png] displays the sigmoidal relationship..."
+- "Model fit quality is visualized in the residuals plot [residuals.png], which shows..."
+- "Summary statistics were exported to [summary_stats.csv] for further analysis."
+
+**IMPORTANT** 
+- User might IMPLY they want artifacts but not explicitly request them - detect this from the task description
+- SELECT ONLY ARTIFACTS THAT WERE REQUESTED BY THE USER OR THAT ARE RELEVANT TO THE TASK
 - NEVER make up or guess file paths - only use paths that appear explicitly in the code or as an output
-- NEVER modify or generate IDs - only use IDs that exist in the execution result
-- **AVOID DUPLICATES**: If a plot is both saved to a file (plt.savefig) AND appears in execution results, prefer the file-based artifact with "path" and SKIP the execution result artifact. Do not list the same visualization twice.
+- **AVOID DUPLICATES**: If we want to include ALL artifacts from generated subfolder, ONLY include the folder-based artifact representing the entire folder
+- **AVOID DUPLICATES**: If we want only specific files from a generated folder, ONLY include the file-based artifacts for those specific files
+- **AVOID DUPLICATES**: IF FILE ARTIFACTS are within a FOLDER ARTIFACT that you are already including, DO NOT include those file artifacts separately
 - If multiple execution result artifacts represent the same plot/figure, include only ONE of them
 
-IMPORTANT formatting rules:
+Example Artifact selection based on current folder structure:
+```bash
+/home/
+    user/
+        output/
+            results.csv
+            plots/
+                dose_response_curve.png
+                gene_expression_chart.png
+```
+- If you decide to save ALL artifacts in "/home/user/output/" → INCLUDE ONLY the folder-based artifact for "/home/user/output/"
+- If you decide to save ONLY "results.csv" → INCLUDE ONLY the file-based artifact for "/home/user/output/results.csv"
+- If you decide to save ALL artifacts in "/home/user/plots/" → INCLUDE ONLY the folder-based artifact for "/home/user/output/plots/"
+
+# IMPORTANT formatting rules:
 - Use task-specific title (not "Answer")
 - Reference artifacts inline with [FILENAME] when discussing them in context
 - Use bold for subsection labels (e.g., **Model Fit Parameters:**)
 - Include specific values with units in Key Findings
 - Organize Results section with subsections
-- List artifacts with simple filenames in Generated Artifacts section
-- Return ONLY valid JSON without any markdown formatting or code fences
+- List artifacts with simple filenames in `answer` JSON field
+
+CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences
 """
 
 
 def build_task_response_prompt(
     task_description: str,
-    generated_code: str = "",
-    execution_json: str = "{}",
-    completed_steps: list[dict] | None = None,
-    failure_reason: str | None = None,
+    completed_steps: Optional[list[dict]] = None,
+    failure_reason: Optional[str] = None,
+    workdir_contents: Optional[str] = None,
 ) -> str:
     """
     Build the user prompt for task response generation.
 
     Args:
         task_description: Description of the original task
-        generated_code: The code that was generated and executed
-        execution_json: JSON string from Execution.to_json() containing logs, artifacts, and errors
-        completed_steps: List of completed steps (for  architecture)
+        completed_steps: List of completed steps with their details
         failure_reason: Reason for failure (for  architecture)
 
     Returns:
@@ -194,76 +253,18 @@ def build_task_response_prompt(
                     output = output[:500] + "... [truncated]"
                 prompt_parts.append(f"  Output: {output}")
 
-    if generated_code:
-        prompt_parts.append(f"\n\nGenerated Code:\n```python\n{generated_code}\n```")
-
-    prompt_parts.append(f"\n\nExecution Result:\n```json\n{execution_json}\n```")
+    if workdir_contents:
+        prompt_parts.append("\n\n" + "=" * 60)
+        prompt_parts.append("WORKING DIRECTORY CONTENTS:")
+        prompt_parts.append("=" * 60)
+        prompt_parts.append(f"\n{workdir_contents}\n")
 
     prompt_parts.append(
         """
-Understanding the Execution Result:
-
-The execution result is a JSON object with the following structure:
-
-1. **artifacts**: Array of execution result artifacts (plots, charts, displayed data)
-   - Each artifact has an **id** field that you must use to reference it
-   - Each artifact can contain multiple format representations (text, html, png, svg, chart, etc.)
-   - **text**: Text representation of the result (e.g., "<Figure size 600x400 with 1 Axes>" for matplotlib figures)
-   - **png**: Base64-encoded PNG image data (when plots/images are generated) - marked as "--- IGNORE ---"
-   - **chart**: Chart metadata with type, title, and elements
-   - **html**: HTML representation (for dataframes, tables, etc.)
-   
-2. **logs**: JSON string containing stdout and stderr
-   - **stdout**: Array of strings printed to standard output (print statements, informational logs)
-   - **stderr**: Array of strings printed to standard error (warnings, non-fatal errors)
-   
-3. **error**: Error object if execution failed, null otherwise
-   - **name**: Error type (e.g., "ValueError", "KeyError")
-   - **value**: Error message
-   - **traceback**: Full stack trace
-
-When analyzing artifacts:
-
-**Step 1 - Check for file-based artifacts FIRST** (use the "path" field):
-- Search the code for file write operations:
-  - plt.savefig('filename.png')
-  - df.to_csv('data.csv')
-  - with open('output.txt', 'w') as f: f.write(...)
-  - json.dump(..., open('data.json', 'w'))
-- Extract the EXACT file path/name from the code
-- Common types: "csv", "json", "text", "image"
-
-**Step 2 - Check execution result artifacts** (use the "id" field):
-- If an artifact has `png` or `chart` fields, it's a plot/visualization
-- Use the exact "id" from the artifact to reference it
-- Common types: "plot", "chart", "png", "table", "text"
-- **SKIP if already covered**: If the code saved a plot with plt.savefig() and the same plot appears in execution results, ONLY include the file-based artifact (the one with path). Do NOT include both.
-
-**Duplicate detection**:
-- If you find plt.savefig() in the code AND see matplotlib figure artifacts in execution results, they represent the SAME plot - only include the file-based one
-- If multiple execution result artifacts have similar descriptions (e.g., multiple IDs for the same figure), include only ONE
-
-Additional analysis:
-- Check `stdout` for printed results, fitted parameters, or analysis outputs
-- Review `stderr` for warnings (often non-critical but should be noted)
-- If `error` is not null, the execution failed and you should explain why
-
-Provide a summary, detailed findings, and list all artifacts that were generated.
-
-**Artifact Referencing Guidelines:**
-
-When discussing artifacts in the answer text:
-1. Use inline references with square brackets: [FILENAME]
-2. Use ONLY the simple filename, never full paths (e.g., [dose_response_curve.png] not [/home/user/plots/dose_response_curve.png])
-3. Reference artifacts naturally in context (e.g., "The fitted curve [dose_response_fitted.png] shows...")
-4. In the "Generated Artifacts" section, list each artifact with its filename and description
-
-Example artifact references in text:
-- "The dose-response curve [dose_response_curve.png] displays the sigmoidal relationship..."
-- "Model fit quality is visualized in the residuals plot [residuals.png], which shows..."
-- "Summary statistics were exported to [summary_stats.csv] for further analysis."
-
-Return the response in the specified JSON format."""
+============================================================
+YOUR TASK: Provide a comprehensive analysis and summary of the task execution.
+============================================================
+"""
     )
 
     # Add final reminder for successful execution scenarios
@@ -280,5 +281,7 @@ FINAL REMINDER: This task was SUCCESSFULLY EXECUTED.
 - Summarize the real results that were obtained
 ============================================================"""
         )
+
+    prompt_parts.append("\nReturn the response in the specified JSON format.\n")
 
     return "\n".join(prompt_parts)

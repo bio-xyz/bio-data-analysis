@@ -1,5 +1,7 @@
 """Prompts for code generation."""
 
+from typing import Optional
+
 
 def get_code_generation_system_prompt() -> str:
     """Get the system prompt for code generation."""
@@ -54,31 +56,32 @@ When fixing a failed attempt:
 - Check if the error was due to a missing variable that should exist
 
 ## OUTPUT FORMAT
-CRITICAL: Return ONLY executable Python code. No markdown, no code fences, no explanations outside of code comments."""
+CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences
+"""
 
 
 def build_code_generation_prompt(
     current_step_goal: str,
-    current_step_description: str | None = None,
-    data_files_description: str | None = None,
-    uploaded_files: list[str] | None = None,
-    last_execution_output: str | None = None,
-    last_execution_error: str | None = None,
-    notebook_code: str | None = None,
-    previous_code: str | None = None,
+    current_step_description: Optional[str] = None,
+    data_files_description: Optional[str] = None,
+    uploaded_files: Optional[list[str]] = None,
+    last_execution_output: Optional[str] = None,
+    last_execution_error: Optional[str] = None,
+    notebook_code: Optional[str] = None,
+    previous_code: Optional[str] = None,
 ) -> str:
     """
     Build the user prompt for code generation.
 
     Args:
         current_step_goal (str): The goal of the current step
-        current_step_description (str | None): Optional detailed description of the current step
-        data_files_description (str | None): Optional description of data files
-        uploaded_files (list[str] | None): Optional list of uploaded file names
-        last_execution_output (str | None): Output from last execution
-        last_execution_error (str | None): Error from last execution
-        notebook_code (str | None): Code already present in the notebook
-        previous_code (str | None): Previously generated code for context
+        current_step_description (Optional[str]): Optional detailed description of the current step
+        data_files_description (Optional[str]): Optional description of data files
+        uploaded_files (Optional[list[str]]): Optional list of uploaded file names
+        last_execution_output (Optional[str]): Output from last execution
+        last_execution_error (Optional[str]): Error from last execution
+        notebook_code (Optional[str]): Code already present in the notebook
+        previous_code (Optional[str]): Previously generated code for context
 
     Returns:
         str: The formatted user prompt

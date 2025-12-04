@@ -27,6 +27,7 @@ task_service = TaskService()
     summary="Run agent with code interpreter",
     response_model=TaskResponse,
     responses={status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": TaskResponse}},
+    response_model_exclude_none=True,
 )
 async def run_agent_with_code_interpreter(
     task: Annotated[TaskRequest, Depends(TaskRequest.as_form)],
@@ -60,6 +61,7 @@ async def run_agent_with_code_interpreter(
     summary="Run agent with code interpreter asynchronously",
     response_model=TaskStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
 )
 async def run_agent_async(
     background_tasks: BackgroundTasks,
@@ -98,6 +100,7 @@ async def run_agent_async(
         status.HTTP_404_NOT_FOUND: {"description": "Task not found"},
         status.HTTP_200_OK: {"model": TaskResponse},
     },
+    response_model_exclude_none=True,
 )
 async def get_task_details(task_id: str) -> TaskResponse:
     """

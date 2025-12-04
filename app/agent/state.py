@@ -1,12 +1,13 @@
 """Agent state definition for LangGraph."""
 
-from typing import Any
+from typing import Any, Optional
 
 from e2b_code_interpreter import Execution
 from langgraph.graph import MessagesState
 from pydantic import Field
 
-from app.models.task import TaskInfo, TaskResponse
+from app.models.structured_outputs import TaskResponseAnswer
+from app.models.task import TaskInfo
 from app.utils.nb_builder import NotebookBuilder
 
 
@@ -66,8 +67,6 @@ class AgentState(MessagesState):
 
     overall_progress: str = Field(default="", description="Summary of progress so far")
 
-    # Step attempt tracking (for LLM context only)
-
     # CODE_GENERATION_NODE state
     generated_code: str = Field(
         default="", description="Generated Python code for current step"
@@ -77,24 +76,23 @@ class AgentState(MessagesState):
     )
 
     # CODE_EXECUTION_NODE state
-    execution_result: Execution | None = Field(
+    execution_result: Optional[Execution] = Field(
         default=None, description="Result from code execution"
     )
     last_execution_output: str = Field(
         default="", description="Output from last code execution"
     )
-    last_execution_error: str | None = Field(
+    last_execution_error: Optional[str] = Field(
         default=None, description="Error from last code execution"
     )
 
     # Overall status
-    error: str | None = Field(default=None, description="Error message from any stage")
+    error: Optional[str] = Field(
+        default=None, description="Error message from any stage"
+    )
     failure_reason: str = Field(default="", description="Reason for failure if any")
 
     # ANSWERING_NODE output
-    task_response: TaskResponse = Field(default=None, description="Final task response")
-
-    # Notebook builder to record code cells and execution outputs
-    notebook_builder: NotebookBuilder | None = Field(
-        description="NotebookBuilder instance capturing execution",
+    task_answer: Optional[TaskResponseAnswer] = Field(
+        default=None, description="Final task response"
     )

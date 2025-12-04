@@ -1,10 +1,6 @@
-import json
-import uuid
 from typing import Dict, Optional, Type, TypeVar
 
 import instructor
-from e2b_code_interpreter import Execution
-from e2b_code_interpreter.models import serialize_results
 from pydantic import BaseModel
 
 from app.config import get_logger, settings
@@ -15,9 +11,8 @@ from app.models.structured_outputs import (
     GeneralAnswerResponse,
     PlanningDecision,
     PythonCode,
-    TaskResponseOutput,
+    TaskResponseAnswer,
 )
-from app.models.task import ArtifactResponse, TaskResponse
 from app.prompts import (
     build_code_generation_prompt,
     build_code_planning_prompt,
@@ -134,62 +129,33 @@ class LLMService:
             **call_kwargs,
         )
 
-    def generate_task_response(
+    def generate_task_response_answer(
         self,
         task_description: str,
-        generated_code: str = "",
-        execution_result: Optional[Execution] = None,
         completed_steps: Optional[list[dict]] = None,
         failure_reason: Optional[str] = None,
-    ) -> TaskResponse:
+        workdir_contents: Optional[str] = None,
+    ) -> TaskResponseAnswer:
         """
         Generate a response summarizing the task, code, and execution result.
 
         Args:
             task_description: Description of the task
-            generated_code: The code that was generated
-            execution_result: The result of executing the code
             completed_steps: List of completed steps ()
             failure_reason: Reason for failure if any ()
 
         Returns:
-            TaskResponse: The response object containing the summary
+            TaskResponseAnswer: The response object containing the summary
         """
 
         logger.info("Generating task response...")
 
-        if not execution_result:
-            logger.info(
-                "No execution result provided - creating empty Execution object"
-            )
-            execution_result = Execution()
-
-        parsed_execution = {
-            "artifacts": [],
-            "logs": execution_result.logs.to_json(),
-            "error": execution_result.to_json() if execution_result.error else None,
-        }
-
-        serialized_results = serialize_results(execution_result.results)
-        mapped_results: Dict[str, str] = {}
-        for result in serialized_results:
-            result["id"] = str(uuid.uuid4())
-            if "png" in result:
-                mapped_results[result["id"]] = result["png"]
-                result["png"] = " --- IGNORE --- "
-
-            # Remove chart elements to reduce prompt size
-            if "chart" in result and "elements" in result["chart"]:
-                result["chart"]["elements"] = " --- IGNORE --- "
-            parsed_execution["artifacts"].append(result)
-
         system_prompt = get_task_response_system_prompt()
         user_prompt = build_task_response_prompt(
             task_description=task_description,
-            generated_code=generated_code,
-            execution_json=json.dumps(parsed_execution),
             completed_steps=completed_steps,
             failure_reason=failure_reason,
+            workdir_contents=workdir_contents,
         )
 
         messages = [
@@ -197,41 +163,22 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
 
-        response_output = self._generate_structured(
+        response_answer: TaskResponseAnswer = self._generate_structured(
             messages=messages,
-            response_model=TaskResponseOutput,
+            response_model=TaskResponseAnswer,
         )
-        logger.debug(f"Task response output: {response_output}")
 
-        artifacts = []
-        for artifact_info in response_output.artifacts:
-            content = ""
-            if artifact_info.id:
-                content = mapped_results.get(artifact_info.id, "")
-
-            artifact = ArtifactResponse(
-                description=artifact_info.description,
-                type=artifact_info.type or "unknown",
-                filename=artifact_info.filename,
-                path=artifact_info.path,
-                id=artifact_info.id or str(uuid.uuid4()),
-                content=content,
-            )
-            artifacts.append(artifact)
-
-        logger.info(f"Generated response with {len(artifacts)} artifacts")
-
-        return TaskResponse(
-            answer=response_output.answer,
-            artifacts=artifacts,
-            success=response_output.success,
+        logger.info(
+            f"Generated response with {len(response_answer.artifacts)} artifacts"
         )
+
+        return response_answer
 
     def generate_planning_decision(
         self,
         task_description: str,
-        data_files_description: str | None = None,
-        uploaded_files: list[str] | None = None,
+        data_files_description: Optional[str] = None,
+        uploaded_files: Optional[list[str]] = None,
     ) -> PlanningDecision:
         """
         Generate planning decision (PLANNING_NODE).
@@ -271,13 +218,13 @@ class LLMService:
         self,
         task_description: str,
         task_rationale: str,
-        data_files_description: str | None = None,
-        uploaded_files: list[str] | None = None,
-        current_step_goal: str | None = None,
-        current_step_goal_history: list[str] | None = None,
-        last_execution_output: str | None = None,
-        last_execution_error: str | None = None,
-        completed_steps: list[dict] | None = None,
+        data_files_description: Optional[str] = None,
+        uploaded_files: Optional[list[str]] = None,
+        current_step_goal: Optional[str] = None,
+        current_step_goal_history: Optional[list[str]] = None,
+        last_execution_output: Optional[str] = None,
+        last_execution_error: Optional[str] = None,
+        completed_steps: Optional[list[dict]] = None,
     ) -> CodePlanningDecision:
         """
         Generate code planning decision (CODE_PLANNING_NODE).
@@ -329,13 +276,13 @@ class LLMService:
     def generate_step_code(
         self,
         current_step_goal: str,
-        current_step_description: str | None = None,
-        data_files_description: str | None = None,
-        uploaded_files: list[str] | None = None,
-        last_execution_output: str | None = None,
-        last_execution_error: str | None = None,
-        notebook_code: str | None = None,
-        previous_code: str | None = None,
+        current_step_description: Optional[str] = None,
+        data_files_description: Optional[str] = None,
+        uploaded_files: Optional[list[str]] = None,
+        last_execution_output: Optional[str] = None,
+        last_execution_error: Optional[str] = None,
+        notebook_code: Optional[str] = None,
+        previous_code: Optional[str] = None,
     ) -> PythonCode:
         """
         Generate code for a specific step (CODE_GENERATION_NODE).

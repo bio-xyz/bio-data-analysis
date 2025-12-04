@@ -8,10 +8,14 @@ This module implements the FST-based multi-stage architecture with the following
 - ANSWERING_NODE: Generates final response
 """
 
+from pathlib import Path
+from textwrap import indent
+
 from app.agent.signals import ActionSignal
 from app.agent.state import AgentState
 from app.config import get_logger, settings
 from app.models.structured_outputs import (
+    ArtifactDecision,
     CodePlanningDecision,
     PlanningDecision,
     PythonCode,
@@ -394,6 +398,7 @@ def answering_node(state: AgentState) -> dict:
             "action_signal": ActionSignal.FINAL_ANSWER,
         }
 
+    sandbox_id = state.get("sandbox_id", None)
     completed_steps = state.get("completed_steps", [])
     failure_reason = state.get("failure_reason", None)
     execution_result = state.get("execution_result", None)
@@ -402,48 +407,67 @@ def answering_node(state: AgentState) -> dict:
     logger.info("Generating final response")
     logger.info(f"Completed steps: {len(completed_steps)}")
 
-    # Build notebook from completed steps
+    executor_service = ExecutorService()
+    workdir_contents = executor_service.print_limited_tree(sandbox_id)
+
+    task_answer = llm_service.generate_task_response_answer(
+        task_description=task_description,
+        completed_steps=completed_steps,
+        failure_reason=failure_reason,
+        workdir_contents=workdir_contents,
+    )
+
+    # Fix artifact paths to be absolute
+    for artifact in task_answer.artifacts:
+        path = Path(artifact.full_path)
+        full_path = (
+            path
+            if path.is_absolute()
+            else Path(settings.DEFAULT_WORKING_DIRECTORY) / path
+        )
+        artifact.full_path = str(full_path)
+
+    # Build and save notebook from completed steps
     nb_builder = NotebookBuilder()
 
     # Add introduction markdown
-    nb_builder.add_markdown(f"# Task: {task_description}\n\n{task_rationale}")
+    quoted_task = indent(task_description, "> ")
+    nb_builder.add_markdown(
+        f"# Task\n\n{quoted_task}\n\n## Rationale\n\n{task_rationale}"
+    )
 
-    # Add completed steps``
+    # Add completed steps
     for step in completed_steps:
-        step_goal = step.get("goal", "Step")
+        step_goal = step.get("goal", "")
         step_description = step.get("description", "")
         step_code = step.get("code", "")
         execution_result = step.get("execution_result", None)
 
-        # Add markdown description
         nb_builder.add_markdown(f"## Step {step.get('step_number', '?')}: {step_goal}")
         nb_builder.add_markdown(step_description)
 
-        # Add code cell
         if step_code:
             nb_builder.add_code(step_code)
 
         if execution_result:
             nb_builder.add_execution(execution_result)
 
-    # Get combined code for response generation
-    combined_code = "\n\n".join(
-        [step.get("code", "") for step in completed_steps if step.get("code")]
+    # Save notebook to sandbox
+    notebook_path = executor_service.save_notebook_to_sandbox(
+        sandbox_id, nb_builder.build()
     )
 
-    # Generate response
-    task_response = llm_service.generate_task_response(
-        task_description=task_description,
-        generated_code=combined_code,
-        execution_result=execution_result,
-        completed_steps=completed_steps,
-        failure_reason=failure_reason,
+    task_answer.artifacts.append(
+        ArtifactDecision(
+            type="FILE",
+            description="Jupyter notebook documenting the task execution steps.",
+            full_path=notebook_path,
+        )
     )
 
     logger.info("Final response generated")
 
     return {
-        "task_response": task_response,
+        "task_answer": task_answer,
         "action_signal": ActionSignal.FINAL_ANSWER,
-        "notebook_builder": nb_builder,
     }
