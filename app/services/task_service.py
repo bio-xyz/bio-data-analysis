@@ -81,13 +81,11 @@ class TaskService(metaclass=SingletonMeta):
                     os.path.join(task.base_path, fp) for fp in task.file_paths
                 ]
 
-                self.executor_service.mount_s3_bucket(sandbox_id)
-                copied_files = self.executor_service.copy_from_mount(
+                downloaded_files = self.executor_service.download_from_s3(
                     sandbox_id, full_file_paths
                 )
-                self.executor_service.unmount_s3_bucket(sandbox_id)
 
-                uploaded_files.extend(copied_files)
+                uploaded_files.extend(downloaded_files)
 
             # Initialize the agent state
             initial_state = AgentState(
@@ -155,10 +153,6 @@ class TaskService(metaclass=SingletonMeta):
         task_path = Path(f"task/{task_id}")
         artifact_responses: list[ArtifactResponse] = []
 
-        mount_available = artifacts and base_path and settings.FILE_STORAGE_ENABLED
-        if mount_available:
-            self.executor_service.mount_s3_bucket(sandbox_id)
-
         for artifact in artifacts:
             if not self.executor_service.path_exists(sandbox_id, artifact.full_path):
                 logger.warning(f"Artifact path does not exist: {artifact.full_path}")
@@ -173,14 +167,15 @@ class TaskService(metaclass=SingletonMeta):
             )
 
             if base_path and settings.FILE_STORAGE_ENABLED:
-                # Path in the S3 mount relative to base_path
+                # Path in S3 relative to base_path
+                s3_path = str(base_path / task_path / relative_path)
                 artifact_path = str(task_path / relative_path)
                 content = None
-                # Use full qualified path in S3 mount to destination folder
-                self.executor_service.move_to_mount(
+                # Upload to S3 and delete from sandbox
+                self.executor_service.upload_to_s3(
                     sandbox_id,
-                    artifact_full_path,
-                    base_path / task_path / relative_path,
+                    artifact_full_path.as_posix(),
+                    s3_path,
                 )
             else:
                 # Relative path within the sandbox
@@ -198,9 +193,6 @@ class TaskService(metaclass=SingletonMeta):
                 content=content,
             )
             artifact_responses.append(artifact_response)
-
-        if mount_available:
-            self.executor_service.unmount_s3_bucket(sandbox_id)
 
         return artifact_responses
 

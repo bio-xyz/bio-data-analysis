@@ -1,4 +1,5 @@
 import os
+import shlex
 from pathlib import Path
 from typing import Dict, List
 
@@ -104,73 +105,56 @@ class ExecutorService(metaclass=SingletonMeta):
 
         return output
 
-    def mount_s3_bucket(
+    def _run_script_in_sandbox(
         self,
         sandbox_id: str,
-        mount_point: str = settings.DEFAULT_MOUNT_DIRECTORY,
-    ) -> str:
-        """
-        Mount S3 bucket in a specific sandbox.
-        Args:
-            sandbox_id: Unique identifier for the sandbox
-            mount_point: Mount point in the sandbox
-        """
-        self._validate_sandbox_exists(sandbox_id)
-
-        sandbox = self.sandboxes[sandbox_id]
-
-        if (
-            settings.FILE_STORAGE_ENABLED is False
-            or not settings.S3_BUCKET
-            or not settings.S3_ACCESS_KEY_ID
-            or not settings.S3_SECRET_ACCESS_KEY
-        ):
-            logger.error("S3 configuration is incomplete. Cannot mount S3 bucket.")
-            raise ValueError("S3 configuration is incomplete. Cannot mount S3 bucket.")
-
-        logger.info(f"Mounting S3 bucket in sandbox {sandbox_id} at {mount_point}")
-        sandbox.files.write(
-            "/root/.passwd-s3fs",
-            f"{settings.S3_ACCESS_KEY_ID}:{settings.S3_SECRET_ACCESS_KEY}",
-        )
-        sandbox.commands.run("sudo chmod 600 /root/.passwd-s3fs")
-
-        sandbox.files.make_dir(mount_point)
-        sandbox.commands.run(
-            f"sudo s3fs {settings.S3_BUCKET} {mount_point} "
-            "-o passwd_file=/root/.passwd-s3fs "
-            "-o use_path_request_style "
-            f"{f'-o url={settings.S3_ENDPOINT} ' if settings.S3_ENDPOINT else ''}"
-            "-o allow_other "
-            "-o sync"
-        )
-
-        logger.info(f"S3 bucket mounted successfully in sandbox {sandbox_id}")
-        return mount_point
-
-    def unmount_s3_bucket(
-        self,
-        sandbox_id: str,
-        mount_point: str = settings.DEFAULT_MOUNT_DIRECTORY,
+        local_script_path: str,
+        sandbox_script_path: str,
+        command_args: List[str],
+        command_prefix: str = "",
+        env_vars: Dict[str, str] = None,
     ):
         """
-        Unmount S3 bucket in a specific sandbox.
+        Helper method to upload a script to sandbox, make it executable, and run it.
+
         Args:
             sandbox_id: Unique identifier for the sandbox
-            mount_point: Mount point in the sandbox
+            local_script_path: Path to the script file on local filesystem
+            sandbox_script_path: Path where script should be written in sandbox
+            command_args: List of command arguments to pass to the script
+            command_prefix: Optional command prefix (e.g., "sudo", "python", "bash", etc.)
+            env_vars: Optional dictionary of environment variables
+
+        Returns:
+            Command execution result
         """
         self._validate_sandbox_exists(sandbox_id)
-
         sandbox = self.sandboxes[sandbox_id]
 
-        logger.info(f"Unmounting S3 bucket in sandbox {sandbox_id} from {mount_point}")
+        try:
+            with open(local_script_path, "r") as f:
+                script_content = f.read()
+            sandbox.files.write(sandbox_script_path, script_content)
+            sandbox.commands.run(f"sudo chmod +x {shlex.quote(sandbox_script_path)}")
 
-        sandbox.commands.run(f"sudo sync")
-        sandbox.commands.run(f"sudo umount {mount_point}")
+            quoted_args = [shlex.quote(sandbox_script_path)] + [
+                shlex.quote(arg) for arg in command_args
+            ]
+            command = (
+                f"{command_prefix} {' '.join(quoted_args)}"
+                if command_prefix
+                else " ".join(quoted_args)
+            )
 
-        sandbox.files.remove("/root/.passwd-s3fs")
+            result = sandbox.commands.run(
+                command,
+                envs=env_vars or {},
+            )
 
-        logger.info(f"S3 bucket unmounted successfully in sandbox {sandbox_id}")
+            return result
+        finally:
+            if sandbox.files.exists(sandbox_script_path):
+                sandbox.files.remove(sandbox_script_path)
 
     def upload_data_files(
         self,
@@ -273,86 +257,156 @@ class ExecutorService(metaclass=SingletonMeta):
         )
         return file_content
 
-    def copy_from_mount(
+    def download_from_s3(
         self,
         sandbox_id: str,
-        file_paths: List[str],
+        s3_paths: List[str],
         target_folder: str = settings.DEFAULT_DATA_DIRECTORY,
-        mount_folder: str = settings.DEFAULT_MOUNT_DIRECTORY,
     ) -> List[str]:
         """
-        Download and copy file paths to a specific sandbox's user_data folder from s3 mount.
+        Download files or directories from S3 to a specific sandbox.
+        Automatically detects whether each S3 path is a file or directory.
 
         Args:
             sandbox_id: Unique identifier for the sandbox
-            file_paths: List of files to be copiled from mount
+            s3_paths: List of S3 paths (keys or prefixes) to download
             target_folder: Target folder in sandbox
         Returns:
-            List of copied file paths
+            List of downloaded file paths
         """
         self._validate_sandbox_exists(sandbox_id)
-        sandbox = self.sandboxes[sandbox_id]
 
-        if settings.FILE_STORAGE_ENABLED is False:
-            logger.error("File storage is not enabled. Cannot copy from mount.")
-            raise ValueError("File storage is not enabled. Cannot copy from mount.")
+        if not settings.FILE_STORAGE_ENABLED:
+            logger.error("File storage is not enabled. Cannot download from S3.")
+            raise ValueError("File storage is not enabled. Cannot download from S3.")
 
-        logger.info(f"Copying {len(file_paths)} file to sandbox {sandbox_id}")
+        if (
+            not settings.S3_BUCKET
+            or not settings.S3_ACCESS_KEY_ID
+            or not settings.S3_SECRET_ACCESS_KEY
+        ):
+            logger.error("S3 configuration is incomplete. Cannot download from S3.")
+            raise ValueError("S3 configuration is incomplete. Cannot download from S3.")
 
-        sandbox.files.make_dir(target_folder)
+        logger.info(
+            f"Downloading {len(s3_paths)} path(s) from S3 to sandbox {sandbox_id}"
+        )
 
-        registered_files = []
-        for file_path in file_paths:
-            filename = os.path.basename(file_path)
+        env_vars = {
+            "AWS_ACCESS_KEY_ID": settings.S3_ACCESS_KEY_ID,
+            "AWS_SECRET_ACCESS_KEY": settings.S3_SECRET_ACCESS_KEY,
+        }
+
+        downloaded_files = []
+        for s3_path in s3_paths:
+            filename = Path(s3_path).name
             target_path = f"{target_folder}/{filename}"
 
-            sandbox.commands.run(f"sudo cp -r {mount_folder}/{file_path} {target_path}")
-            registered_files.append(target_path)
-            logger.info(f"Copied file path: {file_path} to {target_path}")
+            cmd_args = [
+                settings.S3_BUCKET,
+                s3_path,
+                target_path,
+            ]
 
-        logger.info(f"Successfully copied {len(registered_files)} files")
-        return registered_files
+            if settings.S3_ENDPOINT:
+                cmd_args.extend(["--endpoint", settings.S3_ENDPOINT])
 
-    def move_to_mount(
+            result = self._run_script_in_sandbox(
+                sandbox_id,
+                "app/scripts/s3_download.py",
+                "/tmp/s3_download.py",
+                cmd_args,
+                "sudo -E python",
+                env_vars,
+            )
+
+            if result.error:
+                logger.error(f"Error downloading {s3_path}: {result.error}")
+                raise RuntimeError(f"Failed to download {s3_path}: {result.error}")
+
+            logger.info(f"Download result: {result.stdout}")
+
+            downloaded_files.append(target_path)
+            logger.info(f"Downloaded {s3_path} to {target_path}")
+
+        logger.info(f"Successfully downloaded {len(downloaded_files)} path(s)")
+        return downloaded_files
+
+    def upload_to_s3(
         self,
         sandbox_id: str,
-        source_path: Path,
-        target_path: Path,
-        mount_folder: Path = Path(settings.DEFAULT_MOUNT_DIRECTORY),
-    ):
+        source_path: str,
+        s3_path: str,
+        delete_source: bool = True,
+    ) -> None:
         """
-        Copy files to a specific sandbox's s3 mount folder.
+        Upload a file or directory from sandbox to S3.
 
         Args:
             sandbox_id: Unique identifier for the sandbox
-            source_path: Path of the file/folder to move
-            target_path: Target path in mount
-            mount_folder: Mount folder in sandbox
-        Returns:
-            List of uploaded file paths
+            source_path: Path of the file/folder to upload in sandbox
+            s3_path: Target S3 path (key or prefix)
+            delete_source: Whether to delete source after upload
         """
         self._validate_sandbox_exists(sandbox_id)
         sandbox = self.sandboxes[sandbox_id]
 
         if not settings.FILE_STORAGE_ENABLED:
-            logger.error("File storage is not enabled. Cannot copy to mount.")
-            raise ValueError("File storage is not enabled. Cannot copy to mount.")
+            logger.error("File storage is not enabled. Cannot upload to S3.")
+            raise ValueError("File storage is not enabled. Cannot upload to S3.")
 
-        logger.info(f"Uploading file to mount in sandbox {sandbox_id}")
+        if (
+            not settings.S3_BUCKET
+            or not settings.S3_ACCESS_KEY_ID
+            or not settings.S3_SECRET_ACCESS_KEY
+        ):
+            logger.error("S3 configuration is incomplete. Cannot upload to S3.")
+            raise ValueError("S3 configuration is incomplete. Cannot upload to S3.")
 
-        target_path = mount_folder / target_path
-        sandbox.files.make_dir(target_path.parent.as_posix())
-
-        copy_result = sandbox.commands.run(f"sudo cp -r {source_path} {target_path}")
-        if copy_result.error:
+        if not sandbox.files.exists(source_path):
             logger.error(
-                f"Error moving file to mount in sandbox {sandbox_id}: {copy_result.error}"
+                f"Source path '{source_path}' does not exist in sandbox {sandbox_id}"
             )
-            return
+            raise FileNotFoundError(f"Source path '{source_path}' does not exist")
 
-        sandbox.files.remove(source_path.as_posix())
+        logger.info(
+            f"Uploading {source_path} to S3 path {s3_path} in sandbox {sandbox_id}"
+        )
 
-        logger.info(f"Uploaded file path: {source_path} to {target_path}")
+        cmd_args = [
+            source_path,
+            settings.S3_BUCKET,
+            s3_path,
+        ]
+
+        if settings.S3_ENDPOINT:
+            cmd_args.extend(["--endpoint", settings.S3_ENDPOINT])
+
+        env_vars = {
+            "AWS_ACCESS_KEY_ID": settings.S3_ACCESS_KEY_ID,
+            "AWS_SECRET_ACCESS_KEY": settings.S3_SECRET_ACCESS_KEY,
+        }
+
+        result = self._run_script_in_sandbox(
+            sandbox_id,
+            "app/scripts/s3_upload.py",
+            "/tmp/s3_upload.py",
+            cmd_args,
+            "sudo -E python",
+            env_vars,
+        )
+
+        if result.error:
+            logger.error(f"Error uploading {source_path}: {result.error}")
+            raise RuntimeError(f"Failed to upload {source_path}: {result.error}")
+
+        logger.info(
+            f"Successfully uploaded {source_path} to s3://{settings.S3_BUCKET}/{s3_path}"
+        )
+
+        if delete_source:
+            sandbox.files.remove(source_path)
+            logger.info(f"Deleted source file: {source_path}")
 
     def print_limited_tree(
         self, sandbox_id: str, directory: str = settings.DEFAULT_WORKING_DIRECTORY
@@ -368,18 +422,16 @@ class ExecutorService(metaclass=SingletonMeta):
         """
         self._validate_sandbox_exists(sandbox_id)
 
-        sandbox = self.sandboxes[sandbox_id]
-
         logger.info(f"Listing files in directory {directory} of sandbox {sandbox_id}")
 
-        with open("app/scripts/limited_tree.sh", "r") as script_file:
-            script_content = script_file.read()
-
-        script_path = "/tmp/limited_tree.sh"
-        sandbox.files.write(script_path, script_content)
-        sandbox.commands.run(f"sudo chmod +x {script_path}")
-
-        result = sandbox.commands.run(f"{script_path} {directory}")
+        result = self._run_script_in_sandbox(
+            sandbox_id,
+            "app/scripts/limited_tree.sh",
+            "/tmp/limited_tree.sh",
+            [directory],
+            "sudo",
+            None,
+        )
 
         if result.error:
             logger.error(f"Error listing files in sandbox {sandbox_id}: {result.error}")
