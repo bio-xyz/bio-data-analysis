@@ -20,10 +20,11 @@ from app.models.structured_outputs import (
     PlanningDecision,
     PythonCode,
 )
-from app.models.task import TaskResponse
+from app.models.task import CompletedStep, TaskResponse
 from app.services.executor_service import ExecutorService
 from app.services.llm.llm_service import LLMService
 from app.utils.nb_builder import NotebookBuilder
+from app.utils.string_utils import truncate_output
 
 logger = get_logger(__name__)
 
@@ -137,14 +138,12 @@ def code_planning_node(state: AgentState) -> dict:
     new_action_signal = ActionSignal.from_string(
         decision.signal, ActionSignal.ITERATE_CURRENT_STEP
     )
-    new_step_goal = decision.current_step_goal or current_step_goal
-    new_step_description = decision.current_step_description
+    new_step_goal = decision.step_goal or current_step_goal
+    new_step_description = decision.step_description
     reasoning = decision.reasoning
-    progress_summary = decision.progress_summary
 
     # Update world state
     updates = {
-        "overall_progress": progress_summary,
         # Reset code generation attempts
         "code_generation_attempts": 0,
         # Reset execution context
@@ -197,14 +196,14 @@ def code_planning_node(state: AgentState) -> dict:
         ActionSignal.TASK_FAILED,
     ):
         logger.info("Finalizing current step before proceeding")
-        completed_step = {
-            "step_number": step_number,
-            "goal": current_step_goal,
-            "description": current_step_description,
-            "code": generated_code,
-            "execution_result": execution_result,
-            "success": not last_execution_error,
-        }
+        completed_step = CompletedStep(
+            step_number=step_number,
+            goal=current_step_goal,
+            description=current_step_description,
+            code=generated_code,
+            execution_result=execution_result,
+            success=not last_execution_error,
+        )
         updates["completed_steps"] = completed_steps + [completed_step]
 
     return updates
@@ -248,10 +247,7 @@ def code_generation_node(state: AgentState) -> dict:
     notebook_code = ""
     if completed_steps:
         for step in completed_steps:
-            step_number = step.get("step_number", "?")
-            step_goal = step.get("goal", "")
-            step_code = step.get("code", "")
-            notebook_code += f"\n\n# Step {step_number}: {step_goal}\n{step_code}"
+            notebook_code += f"\n\n# Step {step.step_number}: {step.goal}\n{step.code}"
 
     code_result: PythonCode = llm_service.generate_step_code(
         data_files_description=data_files_description,
@@ -298,34 +294,30 @@ def code_execution_node(state: AgentState) -> dict:
     try:
         execution = executor.execute_code(sandbox_id, generated_code)
 
-        # Check for execution errors
         if execution.error:
             error_msg = str(execution.logs.stderr or execution.error)
             logger.warning(f"Code execution failed: {error_msg}")
 
             return {
                 "execution_result": execution,
-                "last_execution_error": error_msg[:1500],
-                "last_execution_output": execution.logs.stdout[:1500],
+                "last_execution_error": truncate_output(error_msg),
+                "last_execution_output": truncate_output(execution.logs.stdout),
                 "action_signal": ActionSignal.CODE_EXECUTION_FAILED,
             }
 
-        # Success - capture output
         output = ""
         if execution.logs.stdout:
-            output += "\n".join(execution.logs.stdout)
-        if execution.logs.stderr:
-            output += "\n[stderr]\n" + "\n".join(execution.logs.stderr)
+            output += "\n[stdout]\n" + truncate_output("\n".join(execution.logs.stdout))
         if execution.results:
             results = [str(r) for r in execution.results]
-            output += "\n[results]\n" + "\n".join(results)
+            output += "\n[results]\n" + truncate_output("\n".join(results))
 
         logger.info("Code execution succeeded")
         logger.info(f"Execution output: {output}...")
 
         return {
             "execution_result": execution,
-            "last_execution_output": output[:1500] or "(no output)",
+            "last_execution_output": output or "(no output)",
             "last_execution_error": "",
             "action_signal": ActionSignal.CODE_EXECUTION_SUCCESS,
         }
@@ -333,7 +325,7 @@ def code_execution_node(state: AgentState) -> dict:
     except Exception as e:
         logger.error(f"Execution exception: {e}")
         return {
-            "last_execution_error": str(e)[:1500],
+            "last_execution_error": truncate_output(str(e)),
             "last_execution_output": "",
             "action_signal": ActionSignal.CODE_EXECUTION_FAILED,
         }
@@ -438,19 +430,14 @@ def answering_node(state: AgentState) -> dict:
 
     # Add completed steps
     for step in completed_steps:
-        step_goal = step.get("goal", "")
-        step_description = step.get("description", "")
-        step_code = step.get("code", "")
-        execution_result = step.get("execution_result", None)
+        nb_builder.add_markdown(f"## Step {step.step_number}: {step.goal}")
+        nb_builder.add_markdown(step.description)
 
-        nb_builder.add_markdown(f"## Step {step.get('step_number', '?')}: {step_goal}")
-        nb_builder.add_markdown(step_description)
+        if step.code:
+            nb_builder.add_code(step.code)
 
-        if step_code:
-            nb_builder.add_code(step_code)
-
-        if execution_result:
-            nb_builder.add_execution(execution_result)
+        if step.execution_result:
+            nb_builder.add_execution(step.execution_result)
 
     # Save notebook to sandbox
     notebook_path = executor_service.save_notebook_to_sandbox(

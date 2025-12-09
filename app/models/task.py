@@ -2,14 +2,46 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+from e2b_code_interpreter import Execution
 from fastapi import Form
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class CompletedStep(BaseModel):
+    """Represents a completed execution step in the agent workflow."""
+
+    step_number: int = Field(
+        ...,
+        description="Sequential step number (1-indexed)",
+    )
+    goal: str = Field(
+        ...,
+        description="The goal or objective of this step",
+    )
+    description: str = Field(
+        ...,
+        description="Detailed description of what this step does",
+    )
+    code: str = Field(
+        ...,
+        description="The Python code executed in this step",
+    )
+    execution_result: Optional[Execution] = Field(
+        None,
+        description="Result from code execution (e2b Execution object)",
+    )
+    success: bool = Field(
+        ...,
+        description="Whether the step executed successfully",
+    )
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class TaskRequest(BaseModel):

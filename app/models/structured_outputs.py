@@ -45,21 +45,17 @@ class CodePlanningDecision(BaseModel):
         ...,
         description="The decision signal: ITERATE_CURRENT_STEP, PROCEED_TO_NEXT_STEP, TASK_COMPLETED, or TASK_FAILED",
     )
-    current_step_goal: str = Field(
+    step_goal: str = Field(
         default="",
         description="Clear, small, specific goal for the current/next step (empty string if TASK_COMPLETED or TASK_FAILED)",
     )
-    current_step_description: str = Field(
+    step_description: str = Field(
         default="",
         description="Detailed description of what needs to be done (empty string if TASK_COMPLETED or TASK_FAILED) in markdown format",
     )
     reasoning: str = Field(
         default="",
         description="Explanation of why this decision was made",
-    )
-    progress_summary: str = Field(
-        default="",
-        description="Brief summary of overall progress so far",
     )
 
 

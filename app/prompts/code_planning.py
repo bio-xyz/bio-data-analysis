@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+from app.models.task import CompletedStep
+
 
 def get_code_planning_system_prompt() -> str:
     """Get the system prompt for the code planning node."""
@@ -80,7 +82,7 @@ def build_code_planning_prompt(
     current_step_goal_history: Optional[list[str]] = None,
     last_execution_output: Optional[str] = None,
     last_execution_error: Optional[str] = None,
-    completed_steps: Optional[list[dict]] = None,
+    completed_steps: Optional[list[CompletedStep]] = None,
 ) -> str:
     """
     Build the user prompt for the code planning node.
@@ -115,10 +117,8 @@ def build_code_planning_prompt(
     if completed_steps:
         prompt_parts.append("\n=== COMPLETED STEPS ===")
         for i, step in enumerate(completed_steps, 1):
-            prompt_parts.append(f"\nStep {i}: {step.get('goal', 'N/A')}")
-            prompt_parts.append(
-                f"  Status: {'SUCCESS' if step.get('success') else 'FAILED'}"
-            )
+            prompt_parts.append(f"\nStep {i}: {step.goal}")
+            prompt_parts.append(f"  Status: {'SUCCESS' if step.success else 'FAILED'}")
 
     # Add current step information
     if current_step_goal:
@@ -142,7 +142,7 @@ def build_code_planning_prompt(
             )
         elif last_execution_output:
             prompt_parts.append(
-                f"\nCurrent step Execution Output: {last_execution_output[:1000]}"
+                f"\nCurrent step Execution Output: {last_execution_output}"
             )
             prompt_parts.append("\nStep completed successfully!")
     else:

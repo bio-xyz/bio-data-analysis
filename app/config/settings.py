@@ -77,6 +77,10 @@ class Settings:
         os.getenv("CODE_GENERATION_MAX_RETRIES", "5")
     )
 
+    # Output Truncation Configuration
+    MAX_OUTPUT_CHARS: int = int(os.getenv("MAX_OUTPUT_CHARS", "25000"))
+    OUTPUT_SPLIT_RATIO: float = float(os.getenv("OUTPUT_SPLIT_RATIO", "0.6"))
+
     # Task Tracking Configuration
     TASK_CLEANUP_INTERVAL_SECONDS: int = int(
         os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60")

@@ -1,14 +1,13 @@
 """Agent state definition for LangGraph."""
 
-from typing import Any, Optional
+from typing import Optional
 
 from e2b_code_interpreter import Execution
 from langgraph.graph import MessagesState
 from pydantic import Field
 
 from app.models.structured_outputs import TaskResponseAnswer
-from app.models.task import TaskInfo
-from app.utils.nb_builder import NotebookBuilder
+from app.models.task import CompletedStep, TaskInfo
 
 
 class AgentState(MessagesState):
@@ -61,11 +60,9 @@ class AgentState(MessagesState):
     step_attempts: int = Field(
         default=0, description="Number of attempts for current step"
     )
-    completed_steps: list[dict[str, Any]] = Field(
+    completed_steps: list[CompletedStep] = Field(
         default_factory=list, description="List of completed steps with results"
     )
-
-    overall_progress: str = Field(default="", description="Summary of progress so far")
 
     # CODE_GENERATION_NODE state
     generated_code: str = Field(

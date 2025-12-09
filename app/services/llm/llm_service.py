@@ -13,6 +13,7 @@ from app.models.structured_outputs import (
     PythonCode,
     TaskResponseAnswer,
 )
+from app.models.task import CompletedStep
 from app.prompts import (
     build_code_generation_prompt,
     build_code_planning_prompt,
@@ -132,7 +133,7 @@ class LLMService:
     def generate_task_response_answer(
         self,
         task_description: str,
-        completed_steps: Optional[list[dict]] = None,
+        completed_steps: Optional[list[CompletedStep]] = None,
         failure_reason: Optional[str] = None,
         workdir_contents: Optional[str] = None,
     ) -> TaskResponseAnswer:
@@ -141,8 +142,8 @@ class LLMService:
 
         Args:
             task_description: Description of the task
-            completed_steps: List of completed steps ()
-            failure_reason: Reason for failure if any ()
+            completed_steps: List of completed steps
+            failure_reason: Reason for failure if any
 
         Returns:
             TaskResponseAnswer: The response object containing the summary
@@ -224,7 +225,7 @@ class LLMService:
         current_step_goal_history: Optional[list[str]] = None,
         last_execution_output: Optional[str] = None,
         last_execution_error: Optional[str] = None,
-        completed_steps: Optional[list[dict]] = None,
+        completed_steps: Optional[list[CompletedStep]] = None,
     ) -> CodePlanningDecision:
         """
         Generate code planning decision (CODE_PLANNING_NODE).
