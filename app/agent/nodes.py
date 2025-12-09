@@ -88,7 +88,6 @@ def code_planning_node(state: AgentState) -> dict:
     """
     # Input task context
     task_description = state.get("task_description")
-    task_rationale = state.get("task_rationale")
     data_files_description = state.get("data_files_description")
     uploaded_files = state.get("uploaded_files")
 
@@ -125,7 +124,6 @@ def code_planning_node(state: AgentState) -> dict:
     llm_service = LLMService(settings.CODE_PLANNING_LLM)
     decision: CodePlanningDecision = llm_service.generate_code_planning_decision(
         task_description=task_description,
-        task_rationale=task_rationale,
         data_files_description=data_files_description,
         uploaded_files=uploaded_files,
         current_step_goal=current_step_goal,
@@ -203,6 +201,7 @@ def code_planning_node(state: AgentState) -> dict:
             code=generated_code,
             execution_result=execution_result,
             success=not last_execution_error,
+            observations=decision.observations,
         )
         updates["completed_steps"] = completed_steps + [completed_step]
 
@@ -444,10 +443,15 @@ def answering_node(state: AgentState) -> dict:
         sandbox_id, nb_builder.build()
     )
 
+    notebook_description = (
+        task_answer.notebook_description
+        or "Jupyter notebook documenting the task execution steps."
+    )
+
     task_answer.artifacts.append(
         ArtifactDecision(
             type="FILE",
-            description="Jupyter notebook documenting the task execution steps.",
+            description=notebook_description,
             full_path=notebook_path,
         )
     )

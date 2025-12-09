@@ -5,6 +5,50 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class StepObservation(BaseModel):
+    """
+    Model for capturing important observations from a completed step.
+
+    These observations help track what was learned during code execution
+    and inform decisions about next steps.
+    """
+
+    title: str = Field(
+        ...,
+        description="Concise title summarizing the observation (e.g., 'Strong correlation found', 'Missing data in column X')",
+    )
+    summary: str = Field(
+        ...,
+        description="Detailed description of what was observed, including specific values, patterns, or findings",
+    )
+    importance: int = Field(
+        ...,
+        ge=1,
+        le=5,
+        description=(
+            "Intrinsic strength of the finding (1-5). How strong, reliable, and meaningful is this observation by itself?\n"
+            "5 = Critical: Core property, major driver, decisive result\n"
+            "4 = Strong: Large effect, clear separation, robust trend\n"
+            "3 = Moderate: Clear finding but not dominant\n"
+            "2 = Weak: Small effect, noisy result, narrow scope\n"
+            "1 = Trivial: Minor detail, sanity check, expected result"
+        ),
+    )
+    relevance: int = Field(
+        ...,
+        ge=1,
+        le=5,
+        description=(
+            "Usefulness for answering the original task (1-5). How directly does this help answer what the user asked?\n"
+            "5 = Essential: Required to answer the question\n"
+            "4 = High: Directly informs the question\n"
+            "3 = Medium: Some link, helpful background\n"
+            "2 = Low: Indirect or contextual only\n"
+            "1 = Irrelevant: Interesting but unrelated to the question"
+        ),
+    )
+
+
 class PythonCode(BaseModel):
     """
     Model for pure Python code output.
@@ -57,6 +101,16 @@ class CodePlanningDecision(BaseModel):
         default="",
         description="Explanation of why this decision was made",
     )
+    observations: list[StepObservation] = Field(
+        default_factory=list,
+        description=(
+            "List of important observations from the current step. "
+            "Populate when signal is PROCEED_TO_NEXT_STEP, TASK_COMPLETED, or TASK_FAILED. "
+            "Capture key findings, patterns, statistics, or issues discovered during execution. "
+            "Each observation should have meaningful importance and relevance scores. "
+            "Return empty list if no useful data insights were found."
+        ),
+    )
 
 
 class ArtifactDecision(BaseModel):
@@ -79,19 +133,50 @@ class ArtifactDecision(BaseModel):
 class TaskResponseAnswer(BaseModel):
     """Model for task response output."""
 
+    notebook_description: str = Field(
+        ...,
+        description=(
+            "Title/description for the Jupyter notebook based on the analysis. "
+            "1 sentence, max 5-10 words. Must start with a capital letter, ending with period if possible. "
+            "Be specific to the task (mention main goal, data, or method). "
+            "Should include 'Jupyter notebook' or 'analysis notebook' or similar phrase. "
+            "Output ONLY the sentence, no quotes, no extra text."
+        ),
+    )
     answer: str = Field(
         ...,
-        description="Direct answer to the user's question if task did not require code execution. Or detailed report if code execution was performed.\n"
-        "Example format for report:\n\n"
-        "# Task-Specific Title\n\n## Overview\nBrief summary...\n\n## Key Findings\n- IC50: 6.236 µM\n- R²: 0.9976\n\n## Results and Interpretation\nDetailed analysis with inline artifact references [dose_response_curve.png]...\n\n**Model Fit Parameters:**\n- Parameter a: value\n- Parameter b: value\n\n## Data Patterns and Insights\nObservations...\n\n**Summary statistics:**\n- Median: value\n- Range: min - max\n\n## Generated Artifacts\n- **dose_response_curve.png**: Description\n- **residuals_plot.png**: Description\n\n## Conclusions\nMain takeaways...",
+        description=(
+            "Markdown report synthesizing the analysis. MUST follow this structure:\n\n"
+            "# [Task-Specific Title]\n"
+            "2-5 sentence summary of the main conclusion or failure explanation.\n\n"
+            "## Key Findings\n"
+            "3-10 bullet points with concrete numbers/facts.\n\n"
+            "## Results and Interpretation\n"
+            "Grouped explanations with specific values. Reference artifacts as [FILENAME].\n\n"
+            "## Limitations\n"
+            "Data quality issues, missing data, or analysis constraints.\n\n"
+            "## Generated Artifacts\n"
+            "List of selected artifacts with descriptions (or 'None').\n\n"
+            "## Conclusions and Implications\n"
+            "What the findings mean for the user's question."
+        ),
     )
     success: bool = Field(
         default=True,
-        description="Whether the task was completed successfully",
+        description=(
+            "Whether the task was completed successfully.\n"
+            "- True: Task completed and produced meaningful results (even if partial).\n"
+            "- False: Task failed due to errors, missing data, or inability to answer."
+        ),
     )
     artifacts: list[ArtifactDecision] = Field(
         default_factory=list,
-        description="List of artifacts generated during the task. Can be empty if no artifacts were created or if user did not request them",
+        description=(
+            "List of artifacts to return to the user.\n"
+            "- Select FILE for individual plots, tables, CSVs.\n"
+            "- Select FOLDER only for large datasets (>20 files) or logical units.\n"
+            "- Empty list if no artifacts were generated or relevant."
+        ),
     )
 
 

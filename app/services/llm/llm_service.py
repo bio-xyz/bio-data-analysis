@@ -218,7 +218,6 @@ class LLMService:
     def generate_code_planning_decision(
         self,
         task_description: str,
-        task_rationale: str,
         data_files_description: Optional[str] = None,
         uploaded_files: Optional[list[str]] = None,
         current_step_goal: Optional[str] = None,
@@ -235,7 +234,6 @@ class LLMService:
 
         Args:
             task_description: Description of the task
-            task_rationale: Rationale from planning node
             data_files_description: Optional description of data files
             uploaded_files: Optional list of uploaded file names
             current_step_goal: Current step goal to be executed
@@ -252,7 +250,6 @@ class LLMService:
         system_prompt = get_code_planning_system_prompt()
         user_prompt = build_code_planning_prompt(
             task_description=task_description,
-            task_rationale=task_rationale,
             data_files_description=data_files_description,
             uploaded_files=uploaded_files,
             current_step_goal=current_step_goal,

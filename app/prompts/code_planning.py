@@ -37,6 +37,41 @@ Your role is to analyze the current state and decide the next action:
    - The task is fundamentally impossible with available resources
    - CRITICAL: Be pragmatic and honest about failures
 
+OBSERVATIONS REQUIREMENT:
+For PROCEED_TO_NEXT_STEP, TASK_COMPLETED, and TASK_FAILED signals, you must capture observations from the current step.
+
+Each observation requires:
+- title: Concise summary (e.g., "Strong correlation found", "30% missing data detected")
+- summary: Detailed description with specific values and findings
+- importance (1-5): How strong/meaningful is this finding by itself?
+  * 5 = Critical: Core property, major driver, decisive result (e.g., "IC50 = 6.236 µM, R² = 0.9976")
+  * 4 = Strong: Large effect, clear separation, robust trend (e.g., "Churn 6× higher for monthly plans")
+  * 3 = Moderate: Clear finding but not dominant (e.g., "15% variance explained by feature X")
+  * 2 = Weak: Small effect, noisy result (e.g., "Correlation = 0.12")
+  * 1 = Trivial: Minor detail, sanity check (e.g., "Mean age is 34.2 years")
+
+- relevance (1-5): How directly does this help answer the ORIGINAL TASK?
+  * 5 = Essential: Required to answer the question (e.g., dose-response curve for IC50 task)
+  * 4 = High: Directly informs the question (e.g., key predictor for churn analysis)
+  * 3 = Medium: Helpful background (e.g., data distribution for modeling task)
+  * 2 = Low: Indirect context (e.g., sample size for analysis task)
+  * 1 = Irrelevant: Interesting but unrelated (e.g., age distribution when studying churn)
+
+OBSERVATION GUIDELINES:
+- Focus on findings that advance understanding of the data or task
+- Include both positive findings and issues/blockers discovered
+- Be specific with numbers and values
+- Consider both importance AND relevance - they're different!
+- A finding can be important (strong signal) but low relevance (off-topic)
+- A finding can be highly relevant (answers the question) even if moderate importance
+
+CRITICAL OBSERVATION RULES:
+- RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
+- Do NOT explain the code
+- Do NOT describe the workflow EXCEPT it is directly relevant to observations
+- Do NOT speculate beyond what the output supports
+- IMPORTANT: If the output contains no useful data insight, return an empty list
+
 YOU HAVE FULL AUTONOMY to decide when to TASK_FAILED. Consider:
 - If you've tried multiple approaches and none work, TASK_FAILED with explanation
 - If there's a critical error (missing data, wrong format, etc.), TASK_FAILED early
@@ -75,7 +110,6 @@ CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 
 def build_code_planning_prompt(
     task_description: str,
-    task_rationale: str,
     data_files_description: Optional[str] = None,
     uploaded_files: Optional[list[str]] = None,
     current_step_goal: Optional[str] = None,
@@ -89,7 +123,6 @@ def build_code_planning_prompt(
 
     Args:
         task_description: Description of the overall task
-        task_rationale: Rationale from the planning node
         data_files_description: Optional description of the data files
         uploaded_files: Optional list of uploaded file names
         current_step_goal: Current step being worked on (if any)
@@ -103,9 +136,8 @@ def build_code_planning_prompt(
         str: The formatted user prompt
     """
     prompt_parts = [
-        "=== OVERALL TASK ===",
+        "=== ORIGINAL TASK ===",
         f"Task: {task_description}",
-        f"\nTask Rationale: {task_rationale}",
     ]
 
     if uploaded_files:
@@ -164,7 +196,9 @@ def build_code_planning_prompt(
         )
     elif last_execution_output or not last_execution_error:
         prompt_parts.append(
-            "Previous step succeeded. Decide if you should PROCEED_TO_NEXT_STEP or TASK_COMPLETED if the task is complete."
+            "Current step execution succeeded. Decide if you should ITERATE_CURRENT_STEP if the current step goal is not achieved, "
+            "PROCEED_TO_NEXT_STEP if the step is complete, "
+            "or TASK_COMPLETED if the overall task is done."
         )
 
     prompt_parts.append(

@@ -6,6 +6,8 @@ from e2b_code_interpreter import Execution
 from fastapi import Form
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.structured_outputs import StepObservation
+
 
 class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress"
@@ -39,6 +41,10 @@ class CompletedStep(BaseModel):
     success: bool = Field(
         ...,
         description="Whether the step executed successfully",
+    )
+    observations: list[StepObservation] = Field(
+        default_factory=list,
+        description="List of observations captured during this step",
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
