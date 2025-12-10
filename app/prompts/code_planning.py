@@ -1,5 +1,6 @@
 """Prompts for the CODE_PLANNING_NODE - manages step-by-step code execution planning."""
 
+import json
 from typing import Optional
 
 from app.models.task import CompletedStep
@@ -72,6 +73,11 @@ OBSERVATION GUIDELINES:
 - A finding can be highly relevant (answers the question) even if moderate importance
 
 CRITICAL OBSERVATION RULES:
+- Return ONLY NEW observations from the CURRENT STEP - do not repeat past observations
+- Past observations are listed under each step in COMPLETED STEPS section
+- New observations can OVERRIDE past ones if current step provides better/updated information
+  (e.g., if step 1 found "~500 rows" and step 3 found "exactly 487 rows", return the precise finding)
+- Use same or similar title to override a past observation with corrected/refined data
 - RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
 - Do NOT explain the code
 - Do NOT describe the workflow EXCEPT it is directly relevant to observations
@@ -102,6 +108,25 @@ When generating a new step goal:
 - The step should be achievable in a single code cell
 - Consider dependencies on previous steps
 - Include clear success criteria
+
+LEVERAGE PAST OBSERVATIONS IN STEP DESCRIPTIONS:
+When writing step_goal and step_description, incorporate concrete values discovered in previous observations.
+This ensures the code generation phase has exact names, values, and parameters to use.
+
+BAD (vague): "Plot the time series data"
+GOOD (specific): "Plot sales values over time using 'transaction_date' column as x-axis and 'revenue' as y-axis"
+
+BAD (vague): "Filter outliers from the dataset"  
+GOOD (specific): "Remove rows where 'price' > 10000 (99th percentile identified as 9847)"
+
+BAD (vague): "Handle missing values"
+GOOD (specific): "Fill 23 missing values in 'age' column using median imputation (median=34.5)"
+
+The step_description field should contain all concrete details needed for code generation:
+- Exact column names, variable names, file paths
+- Specific thresholds, parameters, or values discovered
+- Data types, formats, or structures identified
+- Any constraints or edge cases found
 
 Example simple step goals (these are just examples, exact step goals are very different based on the task):
 - Install the pandas, numpy, and matplotlib libraries
@@ -151,12 +176,29 @@ def build_code_planning_prompt(
         if data_files_description:
             prompt_parts.append(f"Data Files Description: {data_files_description}")
 
-    # Add completed steps
+    # Add completed steps with their observations
     if completed_steps:
         prompt_parts.append("\n=== COMPLETED STEPS ===")
-        for i, step in enumerate(completed_steps, 1):
-            prompt_parts.append(f"\nStep {i}: {step.goal}")
+        prompt_parts.append(
+            "(Do NOT repeat these observations. You may OVERRIDE if current step has better data.)"
+        )
+
+        for step in completed_steps:
+            prompt_parts.append(f"\nStep {step.step_number}: {step.goal}")
             prompt_parts.append(f"  Status: {'SUCCESS' if step.success else 'FAILED'}")
+
+            if step.observations:
+                prompt_parts.append("  Observations:")
+                for obs in step.observations:
+                    obs_dict = {
+                        "title": obs.title,
+                        "summary": obs.summary,
+                        "importance": obs.importance,
+                        "relevance": obs.relevance,
+                    }
+                    if obs.raw_output:
+                        obs_dict["raw_output"] = obs.raw_output
+                    prompt_parts.append(f"    - {json.dumps(obs_dict)}")
 
     # Add current step information
     if current_step_goal:
