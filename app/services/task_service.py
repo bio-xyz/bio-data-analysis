@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import nbformat
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent import AgentGraph, AgentState
@@ -110,7 +109,11 @@ class TaskService(metaclass=SingletonMeta):
 
             # Prepare artifacts
             artifacts = self.prepare_artifacts(
-                sandbox_id, task_id, task.base_path, task_answer.artifacts
+                sandbox_id,
+                task_id,
+                task_answer.artifacts,
+                task.base_path,
+                task.target_path,
             )
 
             task_response = TaskResponse(
@@ -134,8 +137,9 @@ class TaskService(metaclass=SingletonMeta):
         self,
         sandbox_id: str,
         task_id: str,
-        base_path: Optional[str],
         artifacts: list[ArtifactDecision],
+        base_path: Optional[str],
+        target_path: Optional[str],
     ) -> list[ArtifactResponse]:
         """
         Prepare artifacts from the sandbox for the task response.
@@ -143,14 +147,19 @@ class TaskService(metaclass=SingletonMeta):
         Args:
             sandbox_id: The sandbox ID
             task_id: The task ID
-            base_path: The base path for file storage
             artifacts: List of artifacts to prepare
+            base_path: The base path for file storage
+            target_path: The target path for file storage
 
         Returns:
             list[ArtifactResponse]: List of prepared artifact responses
         """
         base_path = Path(base_path)
-        task_path = Path(f"task/{task_id}")
+        if target_path:
+            task_path = Path(target_path)
+        else:
+            task_path = Path(f"task/{task_id}")
+
         artifact_responses: list[ArtifactResponse] = []
 
         for artifact in artifacts:

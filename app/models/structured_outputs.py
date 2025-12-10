@@ -21,6 +21,16 @@ class StepObservation(BaseModel):
         ...,
         description="Detailed description of what was observed, including specific values, patterns, or findings",
     )
+    raw_output: str = Field(
+        default="",
+        description=(
+            "The exact value or content that answers the user's question. "
+            "Use when user asks for specific values, exact content, or specifies output format. "
+            "Leave empty if summary adequately captures the finding. "
+            "Include ONLY the direct answer - exclude everything else from stdout. "
+            "Rule: If removing it would make the answer incomplete, keep it; otherwise, exclude it."
+        ),
+    )
     importance: int = Field(
         ...,
         ge=1,
@@ -146,7 +156,13 @@ class TaskResponseAnswer(BaseModel):
     answer: str = Field(
         ...,
         description=(
-            "Markdown report synthesizing the analysis. MUST follow this structure:\n\n"
+            "The answer to the user's task. FORMAT DEPENDS ON USER REQUEST:\n\n"
+            "**IF user specified output format** (e.g., 'answer must be just a number', 'respond with only yes/no', "
+            "'output as CSV', 'answer with Not Applicable if...'):\n"
+            "  - Return ONLY the exact answer in that format\n"
+            "  - Use raw_output from observations if available\n"
+            "  - Examples: '42', 'Not Applicable', 'yes', 'value1,value2,value3'\n\n"
+            "**OTHERWISE**, provide a Markdown report with this structure:\n\n"
             "# [Task-Specific Title]\n"
             "2-5 sentence summary of the main conclusion or failure explanation.\n\n"
             "## Key Findings\n"
@@ -156,7 +172,7 @@ class TaskResponseAnswer(BaseModel):
             "## Limitations\n"
             "Data quality issues, missing data, or analysis constraints.\n\n"
             "## Generated Artifacts\n"
-            "List of selected artifacts with descriptions (or 'None').\n\n"
+            "List of selected artifacts with descriptions.\n\n"
             "## Conclusions and Implications\n"
             "What the findings mean for the user's question."
         ),

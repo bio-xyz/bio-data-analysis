@@ -136,7 +136,7 @@ class TaskResponse(BaseModel):
     )
     answer: str = Field(
         "",
-        description="The agent's detailed answer in markdown format",
+        description="The agent's answer - either in user-specified format or detailed markdown",
     )
     artifacts: list[ArtifactResponse] = Field(
         [],

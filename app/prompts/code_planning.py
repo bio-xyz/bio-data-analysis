@@ -42,7 +42,13 @@ For PROCEED_TO_NEXT_STEP, TASK_COMPLETED, and TASK_FAILED signals, you must capt
 
 Each observation requires:
 - title: Concise summary (e.g., "Strong correlation found", "30% missing data detected")
-- summary: Detailed description with specific values and findings
+- summary: Detailed description with specific values and findings. Might include whole output section if relevant to the user task.
+- raw_output: The exact value or content that answers the user's question.
+  * WHEN TO USE: User asks for specific values, exact content, or specifies output format
+  * WHEN TO SKIP: Summary adequately captures the finding (leave empty)
+  * WHAT TO INCLUDE: Only the final answer - the specific value, result, or content requested
+  * WHAT TO EXCLUDE: Everything else - any output that isn't the direct answer to the question
+  * RULE: If you removed it and the answer would be incomplete, keep it. Otherwise, remove it.
 - importance (1-5): How strong/meaningful is this finding by itself?
   * 5 = Critical: Core property, major driver, decisive result (e.g., "IC50 = 6.236 µM, R² = 0.9976")
   * 4 = Strong: Large effect, clear separation, robust trend (e.g., "Churn 6× higher for monthly plans")

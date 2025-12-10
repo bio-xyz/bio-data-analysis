@@ -8,6 +8,7 @@ This module implements the FST-based multi-stage architecture with the following
 - ANSWERING_NODE: Generates final response
 """
 
+import json
 from pathlib import Path
 from textwrap import indent
 
@@ -139,6 +140,10 @@ def code_planning_node(state: AgentState) -> dict:
     new_step_goal = decision.step_goal or current_step_goal
     new_step_description = decision.step_description
     reasoning = decision.reasoning
+    observations = decision.observations
+
+    obs_json = json.dumps([obs.model_dump() for obs in observations], indent=2)
+    logger.info(f"Observations:\n{obs_json}")
 
     # Update world state
     updates = {
@@ -201,7 +206,7 @@ def code_planning_node(state: AgentState) -> dict:
             code=generated_code,
             execution_result=execution_result,
             success=not last_execution_error,
-            observations=decision.observations,
+            observations=observations,
         )
         updates["completed_steps"] = completed_steps + [completed_step]
 
