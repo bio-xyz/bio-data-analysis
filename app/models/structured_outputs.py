@@ -21,13 +21,12 @@ class StepObservation(BaseModel):
         ...,
         description="Detailed description of what was observed, including specific values, patterns, or findings",
     )
-    kind: Literal["observation", "rule", "constraint"] = Field(
+    kind: Literal["observation", "rule"] = Field(
         default="observation",
         description=(
             "Type of evidence item:\n"
             "- 'observation': Facts derived from execution (e.g., '29% missing', 'positive class is 12%')\n"
-            "- 'rule': External rules defining behavior/semantics (e.g., 'nulls are wildcards', 'case-insensitive match')\n"
-            "- 'constraint': Hard limits/filters/guardrails (e.g., 'only schema X', 'max 10k rows')"
+            "- 'rule': Behavioral rules, semantics, and constraints that must be followed (e.g., 'nulls are wildcards', 'case-insensitive match', 'only schema X', 'max 10k rows')"
         ),
     )
     source: Literal["data", "spec", "user"] = Field(
