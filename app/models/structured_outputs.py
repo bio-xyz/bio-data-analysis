@@ -13,6 +13,10 @@ class StepObservation(BaseModel):
     and inform decisions about next steps.
     """
 
+    step_number: int = Field(
+        default=0,
+        description="The step number when this observation was made (used for tracking and conflict resolution)",
+    )
     title: str = Field(
         ...,
         description="Concise title summarizing the observation (e.g., 'Strong correlation found', 'Missing data in column X')",
@@ -34,8 +38,8 @@ class StepObservation(BaseModel):
         description=(
             "Origin of this evidence:\n"
             "- 'data': Generated from actual code execution (can be refined by later steps)\n"
-            "- 'spec': From documentation/metadata/manual (binding rule, not overridden by data)\n"
-            "- 'user': Explicit user instruction (highest priority, must not be ignored)"
+            "- 'spec': From documentation/metadata/manual (highest priority, binding rule, not overridden by data)\n"
+            "- 'user': Explicit user instruction (high priority, must not be ignored)"
         ),
     )
     raw_output: str = Field(
@@ -148,6 +152,28 @@ class ExecutionObserverDecision(BaseModel):
             "Capture key findings, patterns, statistics, or issues discovered during execution. "
             "Each observation should have meaningful importance and relevance scores. "
             "Return empty list if no useful data insights were found."
+        ),
+    )
+
+
+class ReflectionDecision(BaseModel):
+    """Model for reflection node decisions - refines and deduplicates world observations."""
+
+    rules: list[StepObservation] = Field(
+        default_factory=list,
+        description=(
+            "Refined list of rule observations (kind='rule'). "
+            "These are behavioral rules, constraints, and semantics that MUST be followed. "
+            "Examples: 'nulls are wildcards', 'case-insensitive match', 'only schema X'. "
+            "Deduplicate, merge, refine, and filter from existing + new observations."
+        ),
+    )
+    data_observations: list[StepObservation] = Field(
+        default_factory=list,
+        description=(
+            "Refined list of data observations (kind='observation'). "
+            "These are facts discovered from execution - data findings, statistics, patterns. "
+            "Deduplicate, merge, refine, and filter from existing + new observations."
         ),
     )
 

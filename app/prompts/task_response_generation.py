@@ -3,7 +3,9 @@
 import json
 from typing import Optional
 
+from app.models.structured_outputs import StepObservation
 from app.models.task import CompletedStep
+from app.utils.observations import split_observations_to_dict
 
 
 def get_task_response_system_prompt() -> str:
@@ -12,13 +14,19 @@ def get_task_response_system_prompt() -> str:
 
 You will receive:
 1. ORIGINAL_TASK: The user's original request.
-2. OBSERVATIONS: A JSON list of findings collected step-by-step. Each observation has:
+2. OBSERVATIONS: Split into two categories:
+   - **Rules**: Observations with kind="rule" - behavioral rules and constraints that must be followed
+   - **Data Observations**: Observations with kind="observation" - facts discovered from execution
+   
+   Each observation has:
    - step_number: When it was observed (later steps are more recent).
    - title: Concise summary of the finding.
-   - summary: Detailed description.
-   - raw_output: (Optional) EXACT code output when the value is critical to answering.
+   - summary: Detailed description with specific values.
+   - kind: "observation" | "rule" (categorization type).
+   - source: "data" | "spec" | "user" (origin of evidence).
+   - raw_output: EXACT code output when the value is critical to answering.
    - importance (1-5): Intrinsic strength of the finding.
-   - relevance (1-5): Relevance to the user's specific question.
+   - relevance (1-5): How directly it helps answer the user's question.
 3. AVAILABLE_ARTIFACTS: List of files/folders in the working directory.
 4. FAILURE_CONTEXT: (Optional) Reason if the workflow failed.
 
@@ -135,34 +143,47 @@ def build_task_response_prompt(
     completed_steps: Optional[list[CompletedStep]] = None,
     failure_reason: Optional[str] = None,
     workdir_contents: Optional[str] = None,
+    world_observations: Optional[list[StepObservation]] = None,
 ) -> str:
     """
     Build the user prompt for task response generation.
 
     Args:
         task_description: Description of the original task
-        completed_steps: List of completed steps with their details
+        completed_steps: List of completed steps with their details (for step summary)
         failure_reason: Reason for failure (for architecture)
         workdir_contents: Contents of the working directory
+        world_observations: Refined world observations from reflection node
 
     Returns:
         str: The formatted user prompt
     """
-    observations_list = []
-    if completed_steps:
-        for step in completed_steps:
-            if step.observations:
-                for obs in step.observations:
-                    obs_dict = obs.model_dump()
-                    obs_dict["step_number"] = step.step_number
-                    observations_list.append(obs_dict)
-
     prompt_parts = [
         "ORIGINAL_TASK:",
         task_description,
-        "\nOBSERVATIONS (JSON):",
-        json.dumps(observations_list, indent=2),
     ]
+
+    # Add completed steps summary for context
+    if completed_steps:
+        steps_summary = []
+        for step in completed_steps:
+            steps_summary.append(
+                f"Step {step.step_number}: {step.goal} [{'SUCCESS' if step.success else 'FAILED'}]"
+            )
+        prompt_parts.append(f"\nCOMPLETED_STEPS:\n" + "\n".join(steps_summary))
+
+    if world_observations:
+        rules, data_observations = split_observations_to_dict(world_observations)
+
+        prompt_parts.append("\nOBSERVATIONS:")
+
+        if rules:
+            prompt_parts.append("Rules:")
+            prompt_parts.append(json.dumps(rules, indent=2))
+
+        if data_observations:
+            prompt_parts.append("Data Observations:")
+            prompt_parts.append(json.dumps(data_observations, indent=2))
 
     if failure_reason:
         prompt_parts.append(f"\nFAILURE_CONTEXT:\n{failure_reason}")

@@ -5,6 +5,7 @@ from typing import Optional
 
 from app.models.structured_outputs import StepObservation
 from app.models.task import CompletedStep
+from app.utils import split_observations_to_dict
 
 
 def get_code_planning_system_prompt() -> str:
@@ -44,9 +45,13 @@ DOCUMENTATION MUST BE READ COMPLETELY BEFORE ANALYSIS:
 
 FIRST STEPS SHOULD TYPICALLY BE:
 1. List available files with sizes to identify documentation and data files
-2. Read documentation file #1 fully (use multiple steps if large)
-3. Read documentation file #2 fully (if exists, use multiple steps if large)
-4. ONLY THEN proceed with data loading and analysis using the discovered context
+2. Read relevant documentation/metadata files in chunks if too large 
+...
+(Documentation reading completed)
+M. Inspect relevant data file structure (head, columns, shape, dtypes, sample values)
+...
+(Data inspection completed) 
+N. ONLY THEN proceed with data loading and analysis using the discovered context
 
 ANTI-PATTERN TO AVOID:
 BAD: "List files AND preview manual.md AND start analysis" (cramming multiple things)
@@ -256,6 +261,7 @@ def build_code_planning_prompt(
     current_step_observations: Optional[list[StepObservation]] = None,
     current_step_success: bool = True,
     completed_steps: Optional[list[CompletedStep]] = None,
+    world_observations: Optional[list[StepObservation]] = None,
 ) -> str:
     """
     Build the user prompt for the code planning node.
@@ -266,9 +272,10 @@ def build_code_planning_prompt(
         uploaded_files: Optional list of uploaded file names
         current_step_goal: Current step being worked on (if any)
         current_step_goal_history: History of current step goals tried, to avoid repetition
-        current_step_observations: Observations from execution observer for current step
+        current_step_observations: Observations from execution observer for current step (used for failure context)
         current_step_success: Whether current step execution was successful
         completed_steps: List of completed steps with their results
+        world_observations: Refined world observations from reflection node
 
     Returns:
         str: The formatted user prompt
@@ -291,44 +298,17 @@ def build_code_planning_prompt(
                 f"Step {step.step_number}: {step.goal} [{'SUCCESS' if step.success else 'FAILED'}]"
             )
 
-        # Aggregate all observations from completed steps
-        all_rules: list[dict] = []
-        all_observations: list[dict] = []
-
-        for step in completed_steps:
-            if step.observations:
-                for obs in step.observations:
-                    obs_dict = {
-                        "step_number": step.step_number,
-                        "kind": obs.kind,
-                        "source": obs.source,
-                        "title": obs.title,
-                        "summary": obs.summary,
-                        "importance": obs.importance,
-                    }
-                    if obs.kind == "observation":
-                        obs_dict["relevance"] = obs.relevance
-                    if obs.raw_output:
-                        obs_dict["raw_output"] = obs.raw_output
-
-                    if obs.kind == "rule":
-                        all_rules.append(obs_dict)
-                    else:
-                        all_observations.append(obs_dict)
+    if world_observations:
+        all_rules, all_observations = split_observations_to_dict(world_observations)
 
         if all_rules:
-            prompt_parts.append(
-                "\n=== RULES & CONSTRAINTS OBSERVATIONS (MUST OBEY) ==="
-            )
-            for obs_dict in all_rules:
-                prompt_parts.append(f"- {json.dumps(obs_dict)}")
+            prompt_parts.append("\n=== RULES & CONSTRAINTS (MUST OBEY) ===")
+            prompt_parts.append(json.dumps(all_rules, indent=2))
 
         if all_observations:
-            prompt_parts.append("\n=== DATA OBSERVATIONS (DATA FINDINGS) ===")
-            for obs_dict in all_observations:
-                prompt_parts.append(f"- {json.dumps(obs_dict)}")
+            prompt_parts.append("\n=== WORLD OBSERVATIONS (DATA FINDINGS) ===")
+            prompt_parts.append(json.dumps(all_observations, indent=2))
 
-    # Add current step information
     if current_step_goal:
         prompt_parts.append("\n=== CURRENT STEP ===")
         prompt_parts.append(f"Goal: {current_step_goal}")
@@ -339,61 +319,28 @@ def build_code_planning_prompt(
             f"Execution Status: {'SUCCESS' if current_step_success else 'FAILED'}"
         )
 
-        if current_step_observations:
-            prompt_parts.append("\nExecution Observations:")
+        if not current_step_success:
+            # Only include current step observations on failure
+            if current_step_observations:
 
-            rules = [o for o in current_step_observations if o.kind == "rule"]
-            findings = [o for o in current_step_observations if o.kind == "observation"]
+                prompt_parts.append("\nCurrent Step Failure Observations:")
+                prompt_parts.append(json.dumps(current_step_observations, indent=4))
 
-            if rules:
-                prompt_parts.append("  Rules Discovered:")
-                for obs in rules:
-                    obs_dict = {
-                        "kind": obs.kind,
-                        "source": obs.source,
-                        "title": obs.title,
-                        "summary": obs.summary,
-                        "importance": obs.importance,
-                    }
-                    if obs.raw_output:
-                        obs_dict["raw_output"] = obs.raw_output
-                    prompt_parts.append(f"    - {json.dumps(obs_dict)}")
-
-            if findings:
-                prompt_parts.append("  Data Findings:")
-                for obs in findings:
-                    obs_dict = {
-                        "kind": obs.kind,
-                        "source": obs.source,
-                        "title": obs.title,
-                        "summary": obs.summary,
-                        "importance": obs.importance,
-                        "relevance": obs.relevance,
-                    }
-                    if obs.raw_output:
-                        obs_dict["raw_output"] = obs.raw_output
-                    prompt_parts.append(f"    - {json.dumps(obs_dict)}")
-
-            if current_step_success:
-                prompt_parts.append(
-                    "\nStep executed successfully. Review observations above."
-                )
             else:
-                prompt_parts.append("\nExecution FAILED. Consider:")
-                prompt_parts.append(
-                    "  - Try a DIFFERENT approach if the error seems fixable"
-                )
-                prompt_parts.append("  - TASK_FAILED if this is an unrecoverable error")
-                prompt_parts.append(
-                    "  - TASK_FAILED if you've exhausted reasonable alternatives"
-                )
-                if current_step_goal_history:
-                    prompt_parts.append(
-                        f"Previous Approaches Tried: {', '.join(current_step_goal_history)}"
-                    )
+                prompt_parts.append("\nExecution FAILED but no observations generated.")
 
-        else:
-            prompt_parts.append("\nNo observations yet - no insights generated.")
+            prompt_parts.append("\nExecution FAILED. Consider:")
+            prompt_parts.append(
+                "  - Try a DIFFERENT approach if the error seems fixable"
+            )
+            prompt_parts.append("  - TASK_FAILED if this is an unrecoverable error")
+            prompt_parts.append(
+                "  - TASK_FAILED if you've exhausted reasonable alternatives"
+            )
+            if current_step_goal_history:
+                prompt_parts.append(
+                    f"Previous Approaches Tried: {', '.join(current_step_goal_history)}"
+                )
     else:
         prompt_parts.append("\n=== CURRENT STEP ===")
         prompt_parts.append("No current step - this is the first iteration.")

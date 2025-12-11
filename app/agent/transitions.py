@@ -121,9 +121,37 @@ def route_after_code_execution(
 
 def route_after_execution_observer(
     state: AgentState,
-) -> Literal[AgentNode.CODE_PLANNING]:
+) -> Literal[AgentNode.REFLECTION, AgentNode.CODE_PLANNING]:
     """
     Route after EXECUTION_OBSERVER_NODE.
+
+    Routes to:
+    - REFLECTION: If execution was successful (to refine and deduplicate observations)
+    - CODE_PLANNING: If execution failed (skip reflection, go directly to planning with failure context)
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Next node name
+    """
+    current_step_success = state.get("current_step_success", True)
+
+    if not current_step_success:
+        logger.info(
+            "Execution failed, routing directly to CODE_PLANNING_NODE (skipping reflection)"
+        )
+        return AgentNode.CODE_PLANNING
+
+    logger.info("Execution successful, routing to REFLECTION_NODE")
+    return AgentNode.REFLECTION
+
+
+def route_after_reflection(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_PLANNING]:
+    """
+    Route after REFLECTION_NODE.
 
     Always routes to CODE_PLANNING to decide next action.
     The LLM in code_planning will decide whether to:
@@ -137,5 +165,5 @@ def route_after_execution_observer(
     Returns:
         Next node name
     """
-    logger.info("Routing to CODE_PLANNING_NODE after observation generation")
+    logger.info("Routing to CODE_PLANNING_NODE after reflection")
     return AgentNode.CODE_PLANNING

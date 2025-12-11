@@ -6,6 +6,7 @@ This module creates the FST-based multi-stage agent graph with:
 - CODE_GENERATION_NODE: Generates code for current step
 - CODE_EXECUTION_NODE: Executes code in sandbox
 - EXECUTION_OBSERVER_NODE: Generates observations from execution results
+- REFLECTION_NODE: Refines and deduplicates world observations
 - ANSWERING_NODE: Generates final response
 
 Graph Flow:
@@ -13,7 +14,8 @@ Graph Flow:
     code_planning -> [code_generation | answering]
     code_generation -> code_execution
     code_execution -> [execution_observer | code_generation]
-    execution_observer -> code_planning
+    execution_observer -> [reflection | code_planning]
+    reflection -> code_planning
     answering -> END
 """
 
@@ -29,6 +31,7 @@ from app.agent.nodes import (
     code_planning_node,
     execution_observer_node,
     planning_node,
+    reflection_node,
 )
 from app.agent.signals import AgentNode
 from app.agent.state import AgentState
@@ -38,6 +41,7 @@ from app.agent.transitions import (
     route_after_code_planning,
     route_after_execution_observer,
     route_after_planning,
+    route_after_reflection,
 )
 from app.config import get_logger
 from app.models.task import TaskStatus
@@ -100,6 +104,7 @@ class AgentGraph(metaclass=SingletonMeta):
         graph.add_node(
             AgentNode.EXECUTION_OBSERVER, with_status_update(execution_observer_node)
         )
+        graph.add_node(AgentNode.REFLECTION, with_status_update(reflection_node))
         graph.add_node(AgentNode.ANSWERING, with_status_update(answering_node))
 
         # Add edges
@@ -145,10 +150,20 @@ class AgentGraph(metaclass=SingletonMeta):
             },
         )
 
-        # execution_observer -> code_planning
+        # execution_observer -> reflection | code_planning
         graph.add_conditional_edges(
             AgentNode.EXECUTION_OBSERVER,
             route_after_execution_observer,
+            {
+                AgentNode.REFLECTION: AgentNode.REFLECTION,
+                AgentNode.CODE_PLANNING: AgentNode.CODE_PLANNING,
+            },
+        )
+
+        # reflection -> code_planning
+        graph.add_conditional_edges(
+            AgentNode.REFLECTION,
+            route_after_reflection,
             {
                 AgentNode.CODE_PLANNING: AgentNode.CODE_PLANNING,
             },

@@ -12,6 +12,7 @@ from app.models.structured_outputs import (
     GeneralAnswerResponse,
     PlanningDecision,
     PythonCode,
+    ReflectionDecision,
     StepObservation,
     TaskResponseAnswer,
 )
@@ -22,6 +23,7 @@ from app.prompts import (
     build_execution_observer_prompt,
     build_general_answer_prompt,
     build_planning_prompt,
+    build_reflection_prompt,
     build_task_clarification_prompt,
     build_task_response_prompt,
     get_code_generation_system_prompt,
@@ -29,6 +31,7 @@ from app.prompts import (
     get_execution_observer_system_prompt,
     get_general_answer_system_prompt,
     get_planning_system_prompt,
+    get_reflection_system_prompt,
     get_task_clarification_system_prompt,
     get_task_response_system_prompt,
 )
@@ -140,6 +143,7 @@ class LLMService:
         completed_steps: Optional[list[CompletedStep]] = None,
         failure_reason: Optional[str] = None,
         workdir_contents: Optional[str] = None,
+        world_observations: Optional[list[StepObservation]] = None,
     ) -> TaskResponseAnswer:
         """
         Generate a response summarizing the task, code, and execution result.
@@ -148,6 +152,8 @@ class LLMService:
             task_description: Description of the task
             completed_steps: List of completed steps
             failure_reason: Reason for failure if any
+            workdir_contents: Contents of the working directory
+            world_observations: Refined world observations from reflection node
 
         Returns:
             TaskResponseAnswer: The response object containing the summary
@@ -161,6 +167,7 @@ class LLMService:
             completed_steps=completed_steps,
             failure_reason=failure_reason,
             workdir_contents=workdir_contents,
+            world_observations=world_observations,
         )
 
         messages = [
@@ -229,6 +236,7 @@ class LLMService:
         current_step_observations: Optional[list[StepObservation]] = None,
         current_step_success: bool = True,
         completed_steps: Optional[list[CompletedStep]] = None,
+        world_observations: Optional[list[StepObservation]] = None,
     ) -> CodePlanningDecision:
         """
         Generate code planning decision (CODE_PLANNING_NODE).
@@ -242,9 +250,10 @@ class LLMService:
             uploaded_files: Optional list of uploaded file names
             current_step_goal: Current step goal to be executed
             current_step_goal_history: History of current step goals tried
-            current_step_observations: Observations from execution observer for current step
+            current_step_observations: Observations from execution observer for current step (for failure context)
             current_step_success: Whether current step execution was successful
             completed_steps: List of completed steps with results
+            world_observations: Refined world observations from reflection node
 
         Returns:
             CodePlanningDecision: Decision with signal, current_step_goal, current_step_description, reasoning
@@ -261,6 +270,7 @@ class LLMService:
             current_step_observations=current_step_observations,
             current_step_success=current_step_success,
             completed_steps=completed_steps,
+            world_observations=world_observations,
         )
 
         messages = [
@@ -444,5 +454,58 @@ class LLMService:
             response_model=ExecutionObserverDecision,
         )
         logger.info(f"Generated {len(result.observations)} observations")
+
+        return result
+
+    def generate_reflection(
+        self,
+        task_description: str,
+        current_step_number: int,
+        current_step_goal: str,
+        current_step_success: bool,
+        current_step_observations: Optional[list[StepObservation]] = None,
+        world_observations: Optional[list[StepObservation]] = None,
+    ) -> ReflectionDecision:
+        """
+        Generate refined world observations from reflection (REFLECTION_NODE).
+
+        Merges new observations with existing world observations, deduplicates,
+        and refines the observation set.
+
+        Args:
+            task_description: Description of the overall task
+            current_step_number: The step number just completed
+            current_step_goal: Goal of the step just completed
+            current_step_success: Whether the current step succeeded
+            current_step_observations: New observations from the current step
+            world_observations: Existing world observations to merge with
+
+        Returns:
+            ReflectionDecision: Refined rules and data observations
+        """
+        logger.info("Generating reflection on observations...")
+
+        system_prompt = get_reflection_system_prompt()
+        user_prompt = build_reflection_prompt(
+            task_description=task_description,
+            current_step_number=current_step_number,
+            current_step_goal=current_step_goal,
+            current_step_success=current_step_success,
+            current_step_observations=current_step_observations,
+            world_observations=world_observations,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        result = self._generate_structured(
+            messages=messages,
+            response_model=ReflectionDecision,
+        )
+        logger.info(
+            f"Reflection generated {len(result.rules)} rules and {len(result.data_observations)} data observations"
+        )
 
         return result

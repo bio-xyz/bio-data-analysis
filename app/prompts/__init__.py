@@ -21,6 +21,7 @@ from app.prompts.general_answer import (
     get_general_answer_system_prompt,
 )
 from app.prompts.planning import build_planning_prompt, get_planning_system_prompt
+from app.prompts.reflection import build_reflection_prompt, get_reflection_system_prompt
 from app.prompts.task_response_generation import (
     build_task_response_prompt,
     get_task_response_system_prompt,
@@ -39,6 +40,9 @@ __all__ = [
     # Planning
     "build_planning_prompt",
     "get_planning_system_prompt",
+    # Reflection
+    "build_reflection_prompt",
+    "get_reflection_system_prompt",
     # Task response
     "build_task_response_prompt",
     "get_task_response_system_prompt",

@@ -92,15 +92,9 @@ KIND AND SOURCE ASSIGNMENT GUIDELINES:
 
 WHY KIND AND SOURCE MATTER:
 - The planner MUST obey items with kind="rule" when generating code
-- Items with source="user" have highest priority and must never be silently ignored
-- When evidence conflicts: user > spec > data
+- Items with source="spec" and "user" have highest priority and must never be silently ignored
+- When evidence conflicts: spec > user > data
 - Final answer must mention rules/constraints that affect interpretation
-
-INTERPRETING RESULTS WITH PREVIOUS RULES:
-When previous rules exist, observations MUST align with those rules. Do NOT generate observations that contradict established rules.
-- If rule: "Nulls are wildcards" → observations about filtering must respect this semantic
-- If rule: "Max 10k rows" → observations about data size should acknowledge this constraint
-- Focus on findings that are CONSISTENT with the rule framework, not random facts that ignore context
 
 CRITICAL OBSERVATION RULES:
 - RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
@@ -120,7 +114,6 @@ def build_execution_observer_prompt(
     current_step_description: Optional[str] = None,
     execution_output: Optional[str] = None,
     execution_error: Optional[str] = None,
-    previous_rules: Optional[list] = None,
 ) -> str:
     """
     Build the user prompt for the execution observer node.
@@ -131,7 +124,6 @@ def build_execution_observer_prompt(
         current_step_description: Detailed description of the current step
         execution_output: Output from code execution (if any)
         execution_error: Error from code execution (if any)
-        previous_rules: List of previously discovered rules to consider
 
     Returns:
         str: The formatted user prompt
@@ -140,11 +132,6 @@ def build_execution_observer_prompt(
         "=== ORIGINAL TASK ===",
         f"Task: {task_description}",
     ]
-
-    if previous_rules:
-        prompt_parts.append("\n=== PREVIOUS RULES ===")
-        for rule in previous_rules:
-            prompt_parts.append(f"- {rule.get('title')}: {rule.get('summary')}")
 
     prompt_parts.append("\n=== CURRENT STEP TO ANALYZE ===")
     prompt_parts.append(f"Goal: {current_step_goal}")

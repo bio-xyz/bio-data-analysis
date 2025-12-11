@@ -52,7 +52,12 @@ class Settings:
     CODE_GENERATION_LLM: LLMConfig = _get_llm_config("CODE_GENERATION", DEFAULT_LLM)
 
     # Execution Observer Node LLM Config
-    EXECUTION_OBSERVER_LLM: LLMConfig = _get_llm_config("EXECUTION_OBSERVER", DEFAULT_LLM)
+    EXECUTION_OBSERVER_LLM: LLMConfig = _get_llm_config(
+        "EXECUTION_OBSERVER", DEFAULT_LLM
+    )
+
+    # Reflection Node LLM Config
+    REFLECTION_LLM: LLMConfig = _get_llm_config("REFLECTION", DEFAULT_LLM)
 
     # Answering Node LLM Config
     ANSWERING_LLM: LLMConfig = _get_llm_config("ANSWERING", DEFAULT_LLM)
@@ -89,6 +94,7 @@ class Settings:
         os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60")
     )
     TASK_EXPIRY_SECONDS: int = int(os.getenv("TASK_EXPIRY_SECONDS", "300"))
+    TASK_MAXIMUM_STEPS: int = int(os.getenv("TASK_MAXIMUM_STEPS", "12"))
 
     # Sandbox Configuration
     SANDBOX_DEFAULT_TIMEOUT_SECONDS: int = int(

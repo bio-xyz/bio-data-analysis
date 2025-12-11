@@ -16,6 +16,7 @@ class AgentNode(str, Enum):
     CODE_GENERATION = "code_generation"
     CODE_EXECUTION = "code_execution"
     EXECUTION_OBSERVER = "execution_observer"
+    REFLECTION = "reflection"
     ANSWERING = "answering"
 
 

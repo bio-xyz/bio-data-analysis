@@ -91,6 +91,12 @@ class AgentState(MessagesState):
         default=True, description="Whether current step execution was successful"
     )
 
+    # REFLECTION_NODE state - Aggregated world observations
+    world_observations: list[StepObservation] = Field(
+        default_factory=list,
+        description="Refined list of all observations from all steps, deduplicated and contextualized by reflection node",
+    )
+
     # Overall status
     error: Optional[str] = Field(
         default=None, description="Error message from any stage"

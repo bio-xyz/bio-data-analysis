@@ -22,6 +22,8 @@ from app.models.structured_outputs import (
     ExecutionObserverDecision,
     PlanningDecision,
     PythonCode,
+    ReflectionDecision,
+    StepObservation,
 )
 from app.models.task import CompletedStep, TaskResponse
 from app.services.executor_service import ExecutorService
@@ -102,9 +104,12 @@ def code_planning_node(state: AgentState) -> dict:
     step_number = state.get("step_number", 0)
     step_attempts = state.get("step_attempts", 0)
 
-    # Observations from execution observer (used for planning decisions)
+    # Observations from execution observer (used for failure context)
     current_step_observations = state.get("current_step_observations", [])
     current_step_success = state.get("current_step_success", True)
+
+    # World observations from reflection node (refined and deduplicated)
+    world_observations = state.get("world_observations", [])
 
     # Execution context (used only for creating CompletedStep, not for LLM)
     generated_code = state.get("generated_code", "")
@@ -118,7 +123,10 @@ def code_planning_node(state: AgentState) -> dict:
     logger.info(f"Step attempts: {step_attempts}")
     logger.info(f"Completed steps: {len(completed_steps)}")
 
-    if step_attempts > settings.CODE_PLANNING_MAX_STEP_RETRIES:
+    if (
+        step_attempts > settings.CODE_PLANNING_MAX_STEP_RETRIES
+        or step_number > settings.TASK_MAXIMUM_STEPS
+    ):
         logger.warning("Exceeded maximum step attempts, marking task as failed")
         return {
             "action_signal": ActionSignal.TASK_FAILED,
@@ -136,6 +144,7 @@ def code_planning_node(state: AgentState) -> dict:
         current_step_observations=current_step_observations,
         current_step_success=current_step_success,
         completed_steps=completed_steps,
+        world_observations=world_observations,
     )
 
     new_action_signal = ActionSignal.from_string(
@@ -358,13 +367,20 @@ def execution_observer_node(state: AgentState) -> dict:
     # Step context
     current_step_goal = state.get("current_step_goal", "")
     current_step_description = state.get("current_step_description", "")
+    completed_steps = state.get("completed_steps", [])
+    step_number = state.get("step_number")
+
+    # Calculate current step number (next step to be completed)
+    current_step_num = step_number if step_number else len(completed_steps) + 1
 
     # Execution context
     last_execution_output = state.get("last_execution_output", "")
     last_execution_error = state.get("last_execution_error", None)
 
     logger.info("=== EXECUTION_OBSERVER_NODE ===")
-    logger.info(f"Generating observations for step: {current_step_goal}")
+    logger.info(
+        f"Generating observations for step {current_step_num}: {current_step_goal}"
+    )
 
     # Generate observations using LLM
     llm_service = LLMService(settings.EXECUTION_OBSERVER_LLM)
@@ -378,6 +394,10 @@ def execution_observer_node(state: AgentState) -> dict:
 
     observations = decision.observations
     execution_success = decision.execution_success
+
+    for obs in observations:
+        obs.step_number = current_step_num
+
     obs_json = json.dumps([obs.model_dump() for obs in observations], indent=2)
     logger.info(f"Execution success: {execution_success}")
     logger.info(f"Observations:\n{obs_json}")
@@ -386,6 +406,77 @@ def execution_observer_node(state: AgentState) -> dict:
     return {
         "current_step_observations": observations,
         "current_step_success": execution_success,
+    }
+
+
+def reflection_node(state: AgentState) -> dict:
+    """
+    REFLECTION_NODE: Refines and deduplicates world observations.
+
+    Takes new observations from the current step and merges them with existing
+    world observations, applying deduplication, conflict resolution, and refinement.
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        dict: Updated state with refined world_observations
+    """
+    # Task context
+    task_description = state.get("task_description", "")
+
+    # Step context
+    step_number = state.get("step_number", 1)
+    current_step_goal = state.get("current_step_goal", "")
+    current_step_success = state.get("current_step_success", True)
+
+    # Observations
+    current_step_observations = state.get("current_step_observations", [])
+    world_observations = state.get("world_observations", [])
+
+    logger.info("=== REFLECTION_NODE ===")
+    logger.info(f"Reflecting on step {step_number}: {current_step_goal}")
+    logger.info(f"Current step success: {current_step_success}")
+    logger.info(f"New observations: {len(current_step_observations)}")
+    logger.info(f"Existing world observations: {len(world_observations)}")
+
+    # Generate refined observations using LLM
+    llm_service = LLMService(settings.REFLECTION_LLM)
+    decision: ReflectionDecision = llm_service.generate_reflection(
+        task_description=task_description,
+        current_step_number=step_number,
+        current_step_goal=current_step_goal,
+        current_step_success=current_step_success,
+        current_step_observations=current_step_observations,
+        world_observations=world_observations,
+    )
+
+    refined_observations = []
+
+    for rule in decision.rules:
+        # Ensure kind is set correctly
+        rule.kind = "rule"
+        refined_observations.append(rule)
+
+    for obs in decision.data_observations:
+        # Ensure kind is set correctly
+        obs.kind = "observation"
+        refined_observations.append(obs)
+
+    def sort_key(o: StepObservation) -> tuple[int, str]:
+        return (o.step_number, o.kind)
+
+    refined_observations.sort(key=sort_key)
+
+    logger.info(
+        f"Refined observations: {len(decision.rules)} rules, {len(decision.data_observations)} data observations"
+    )
+
+    obs_json = json.dumps([obs.model_dump() for obs in refined_observations], indent=2)
+    logger.info(f"World observations (updated):\n{obs_json}")
+
+    return {
+        "world_observations": refined_observations,
     }
 
 
@@ -451,7 +542,7 @@ def answering_node(state: AgentState) -> dict:
     sandbox_id = state.get("sandbox_id", None)
     completed_steps = state.get("completed_steps", [])
     failure_reason = state.get("failure_reason", None)
-    execution_result = state.get("execution_result", None)
+    world_observations = state.get("world_observations", [])
 
     logger.info("=== ANSWERING_NODE ===")
     logger.info("Generating final response")
@@ -465,6 +556,7 @@ def answering_node(state: AgentState) -> dict:
         completed_steps=completed_steps,
         failure_reason=failure_reason,
         workdir_contents=workdir_contents,
+        world_observations=world_observations,
     )
 
     # Fix artifact paths to be absolute
