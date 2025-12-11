@@ -85,15 +85,13 @@ def route_after_code_generation(
 
 def route_after_code_execution(
     state: AgentState,
-) -> Literal[AgentNode.CODE_PLANNING]:
+) -> Literal[AgentNode.EXECUTION_OBSERVER, AgentNode.CODE_GENERATION]:
     """
     Route after CODE_EXECUTION_NODE.
 
-    Always routes back to code_planning to decide next action.
-    The LLM in code_planning will decide whether to:
-    - Retry the step (on failure)
-    - Proceed to next step (on success)
-    - Finalize (task complete or giving up)
+    Routes to:
+    - EXECUTION_OBSERVER: On success or max retries reached (to generate observations)
+    - CODE_GENERATION: On failure with retries remaining
 
     Args:
         state: Current agent state
@@ -105,17 +103,39 @@ def route_after_code_execution(
     code_generation_attempts = state.get("code_generation_attempts", 0)
 
     if signal == ActionSignal.CODE_EXECUTION_SUCCESS:
-        logger.info("Code executed successfully, routing to CODE_PLANNING_NODE")
-        return AgentNode.CODE_PLANNING
+        logger.info("Code executed successfully, routing to EXECUTION_OBSERVER_NODE")
+        return AgentNode.EXECUTION_OBSERVER
     elif (
         signal == ActionSignal.CODE_EXECUTION_FAILED
         and code_generation_attempts >= settings.CODE_GENERATION_MAX_RETRIES
     ):
         logger.info(
-            f"Code executed with failure and max attempts reached ({code_generation_attempts}), routing to CODE_PLANNING_NODE for final decision"
+            f"Code executed with failure and max attempts reached ({code_generation_attempts}), routing to EXECUTION_OBSERVER_NODE"
         )
-        return AgentNode.CODE_PLANNING
+        return AgentNode.EXECUTION_OBSERVER
 
-    # On failure with attempts left, also go to code_planning to retry
+    # On failure with attempts left, retry code generation
     logger.info("Code execution failed, routing to CODE_GENERATION_NODE for retry")
     return AgentNode.CODE_GENERATION
+
+
+def route_after_execution_observer(
+    state: AgentState,
+) -> Literal[AgentNode.CODE_PLANNING]:
+    """
+    Route after EXECUTION_OBSERVER_NODE.
+
+    Always routes to CODE_PLANNING to decide next action.
+    The LLM in code_planning will decide whether to:
+    - Retry the step (on failure)
+    - Proceed to next step (on success)
+    - Finalize (task complete or giving up)
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Next node name
+    """
+    logger.info("Routing to CODE_PLANNING_NODE after observation generation")
+    return AgentNode.CODE_PLANNING

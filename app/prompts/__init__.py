@@ -12,6 +12,10 @@ from app.prompts.code_planning import (
     build_code_planning_prompt,
     get_code_planning_system_prompt,
 )
+from app.prompts.execution_observer import (
+    build_execution_observer_prompt,
+    get_execution_observer_system_prompt,
+)
 from app.prompts.general_answer import (
     build_general_answer_prompt,
     get_general_answer_system_prompt,
@@ -26,10 +30,13 @@ __all__ = [
     # Code generation
     "build_code_generation_prompt",
     "get_code_generation_system_prompt",
-    # Code planning ()
+    # Code planning
     "build_code_planning_prompt",
     "get_code_planning_system_prompt",
-    # Planning ()
+    # Execution observer
+    "build_execution_observer_prompt",
+    "get_execution_observer_system_prompt",
+    # Planning
     "build_planning_prompt",
     "get_planning_system_prompt",
     # Task response

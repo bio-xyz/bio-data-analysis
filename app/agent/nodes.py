@@ -5,6 +5,7 @@ This module implements the FST-based multi-stage architecture with the following
 - CODE_PLANNING_NODE: Plans and manages step-by-step code execution
 - CODE_GENERATION_NODE: Generates code for current step
 - CODE_EXECUTION_NODE: Executes code in sandbox
+- EXECUTION_OBSERVER_NODE: Generates observations from execution results
 - ANSWERING_NODE: Generates final response
 """
 
@@ -18,6 +19,7 @@ from app.config import get_logger, settings
 from app.models.structured_outputs import (
     ArtifactDecision,
     CodePlanningDecision,
+    ExecutionObserverDecision,
     PlanningDecision,
     PythonCode,
 )
@@ -100,10 +102,12 @@ def code_planning_node(state: AgentState) -> dict:
     step_number = state.get("step_number", 0)
     step_attempts = state.get("step_attempts", 0)
 
-    # Execution context
+    # Observations from execution observer (used for planning decisions)
+    current_step_observations = state.get("current_step_observations", [])
+    current_step_success = state.get("current_step_success", True)
+
+    # Execution context (used only for creating CompletedStep, not for LLM)
     generated_code = state.get("generated_code", "")
-    last_execution_output = state.get("last_execution_output", "")
-    last_execution_error = state.get("last_execution_error", None)
     execution_result = state.get("execution_result", None)
 
     # Output task context
@@ -129,8 +133,8 @@ def code_planning_node(state: AgentState) -> dict:
         uploaded_files=uploaded_files,
         current_step_goal=current_step_goal,
         current_step_goal_history=current_step_goal_history,
-        last_execution_output=last_execution_output,
-        last_execution_error=last_execution_error,
+        current_step_observations=current_step_observations,
+        current_step_success=current_step_success,
         completed_steps=completed_steps,
     )
 
@@ -140,10 +144,6 @@ def code_planning_node(state: AgentState) -> dict:
     new_step_goal = decision.step_goal or current_step_goal
     new_step_description = decision.step_description
     reasoning = decision.reasoning
-    observations = decision.observations
-
-    obs_json = json.dumps([obs.model_dump() for obs in observations], indent=2)
-    logger.info(f"Observations:\n{obs_json}")
 
     # Update world state
     updates = {
@@ -154,6 +154,9 @@ def code_planning_node(state: AgentState) -> dict:
         "execution_result": None,
         "last_execution_error": None,
         "last_execution_output": "",
+        # Reset observations for next step
+        "current_step_observations": [],
+        "current_step_success": True,
     }
 
     # Separate decision branches
@@ -205,8 +208,8 @@ def code_planning_node(state: AgentState) -> dict:
             description=current_step_description,
             code=generated_code,
             execution_result=execution_result,
-            success=not last_execution_error,
-            observations=observations,
+            success=current_step_success,
+            observations=current_step_observations,
         )
         updates["completed_steps"] = completed_steps + [completed_step]
 
@@ -244,6 +247,7 @@ def code_generation_node(state: AgentState) -> dict:
 
     logger.info("=== CODE_GENERATION_NODE ===")
     logger.info(f"Generating code for step: {current_step_goal}")
+    logger.info(f"Current step description: {current_step_description}")
 
     llm_service = LLMService(settings.CODE_GENERATION_LLM)
 
@@ -333,6 +337,56 @@ def code_execution_node(state: AgentState) -> dict:
             "last_execution_output": "",
             "action_signal": ActionSignal.CODE_EXECUTION_FAILED,
         }
+
+
+def execution_observer_node(state: AgentState) -> dict:
+    """
+    EXECUTION_OBSERVER_NODE: Generates observations from code execution results.
+
+    Analyzes the output from code execution and extracts meaningful observations
+    that will be stored in state for the code_planning node to use.
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        dict: Updated state with current_step_observations
+    """
+    # Task context
+    task_description = state.get("task_description", "")
+
+    # Step context
+    current_step_goal = state.get("current_step_goal", "")
+    current_step_description = state.get("current_step_description", "")
+
+    # Execution context
+    last_execution_output = state.get("last_execution_output", "")
+    last_execution_error = state.get("last_execution_error", None)
+
+    logger.info("=== EXECUTION_OBSERVER_NODE ===")
+    logger.info(f"Generating observations for step: {current_step_goal}")
+
+    # Generate observations using LLM
+    llm_service = LLMService(settings.EXECUTION_OBSERVER_LLM)
+    decision: ExecutionObserverDecision = llm_service.generate_execution_observations(
+        task_description=task_description,
+        current_step_goal=current_step_goal,
+        current_step_description=current_step_description,
+        execution_output=last_execution_output,
+        execution_error=last_execution_error,
+    )
+
+    observations = decision.observations
+    execution_success = decision.execution_success
+    obs_json = json.dumps([obs.model_dump() for obs in observations], indent=2)
+    logger.info(f"Execution success: {execution_success}")
+    logger.info(f"Observations:\n{obs_json}")
+    logger.info(f"Generated {len(observations)} observations for current step")
+
+    return {
+        "current_step_observations": observations,
+        "current_step_success": execution_success,
+    }
 
 
 def answering_node(state: AgentState) -> dict:

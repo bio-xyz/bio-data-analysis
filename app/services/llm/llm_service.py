@@ -8,21 +8,25 @@ from app.models.llm_config import LLMConfig
 from app.models.structured_outputs import (
     ClarificationResponse,
     CodePlanningDecision,
+    ExecutionObserverDecision,
     GeneralAnswerResponse,
     PlanningDecision,
     PythonCode,
+    StepObservation,
     TaskResponseAnswer,
 )
 from app.models.task import CompletedStep
 from app.prompts import (
     build_code_generation_prompt,
     build_code_planning_prompt,
+    build_execution_observer_prompt,
     build_general_answer_prompt,
     build_planning_prompt,
     build_task_clarification_prompt,
     build_task_response_prompt,
     get_code_generation_system_prompt,
     get_code_planning_system_prompt,
+    get_execution_observer_system_prompt,
     get_general_answer_system_prompt,
     get_planning_system_prompt,
     get_task_clarification_system_prompt,
@@ -222,8 +226,8 @@ class LLMService:
         uploaded_files: Optional[list[str]] = None,
         current_step_goal: Optional[str] = None,
         current_step_goal_history: Optional[list[str]] = None,
-        last_execution_output: Optional[str] = None,
-        last_execution_error: Optional[str] = None,
+        current_step_observations: Optional[list[StepObservation]] = None,
+        current_step_success: bool = True,
         completed_steps: Optional[list[CompletedStep]] = None,
     ) -> CodePlanningDecision:
         """
@@ -238,8 +242,8 @@ class LLMService:
             uploaded_files: Optional list of uploaded file names
             current_step_goal: Current step goal to be executed
             current_step_goal_history: History of current step goals tried
-            last_execution_output: Output from last execution
-            last_execution_error: Error from last execution
+            current_step_observations: Observations from execution observer for current step
+            current_step_success: Whether current step execution was successful
             completed_steps: List of completed steps with results
 
         Returns:
@@ -254,8 +258,8 @@ class LLMService:
             uploaded_files=uploaded_files,
             current_step_goal=current_step_goal,
             current_step_goal_history=current_step_goal_history,
-            last_execution_error=last_execution_error,
-            last_execution_output=last_execution_output,
+            current_step_observations=current_step_observations,
+            current_step_success=current_step_success,
             completed_steps=completed_steps,
         )
 
@@ -395,5 +399,50 @@ class LLMService:
             response_model=GeneralAnswerResponse,
         )
         logger.debug(f"General answer response: {result.answer}")
+
+        return result
+
+    def generate_execution_observations(
+        self,
+        task_description: str,
+        current_step_goal: str,
+        current_step_description: Optional[str] = None,
+        execution_output: Optional[str] = None,
+        execution_error: Optional[str] = None,
+    ) -> ExecutionObserverDecision:
+        """
+        Generate observations from code execution results (EXECUTION_OBSERVER_NODE).
+
+        Args:
+            task_description: Description of the overall task
+            current_step_goal: Current step being worked on
+            current_step_description: Detailed description of the current step
+            execution_output: Output from code execution
+            execution_error: Error from code execution (if any)
+
+        Returns:
+            ExecutionObserverDecision: Observations extracted from execution
+        """
+        logger.info("Generating execution observations...")
+
+        system_prompt = get_execution_observer_system_prompt()
+        user_prompt = build_execution_observer_prompt(
+            task_description=task_description,
+            current_step_goal=current_step_goal,
+            current_step_description=current_step_description,
+            execution_output=execution_output,
+            execution_error=execution_error,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        result = self._generate_structured(
+            messages=messages,
+            response_model=ExecutionObserverDecision,
+        )
+        logger.info(f"Generated {len(result.observations)} observations")
 
         return result

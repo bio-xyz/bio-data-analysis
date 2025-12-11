@@ -21,6 +21,24 @@ class StepObservation(BaseModel):
         ...,
         description="Detailed description of what was observed, including specific values, patterns, or findings",
     )
+    kind: Literal["observation", "rule", "constraint"] = Field(
+        default="observation",
+        description=(
+            "Type of evidence item:\n"
+            "- 'observation': Facts derived from execution (e.g., '29% missing', 'positive class is 12%')\n"
+            "- 'rule': External rules defining behavior/semantics (e.g., 'nulls are wildcards', 'case-insensitive match')\n"
+            "- 'constraint': Hard limits/filters/guardrails (e.g., 'only schema X', 'max 10k rows')"
+        ),
+    )
+    source: Literal["data", "spec", "user"] = Field(
+        default="data",
+        description=(
+            "Origin of this evidence:\n"
+            "- 'data': Generated from actual code execution (can be refined by later steps)\n"
+            "- 'spec': From documentation/metadata/manual (binding rule, not overridden by data)\n"
+            "- 'user': Explicit user instruction (highest priority, must not be ignored)"
+        ),
+    )
     raw_output: str = Field(
         default="",
         description=(
@@ -111,11 +129,23 @@ class CodePlanningDecision(BaseModel):
         default="",
         description="Explanation of why this decision was made",
     )
+
+
+class ExecutionObserverDecision(BaseModel):
+    """Model for execution observer node decisions."""
+
+    execution_success: bool = Field(
+        ...,
+        description=(
+            "Whether the code execution was successful. "
+            "True if the code ran without errors and produced expected output. "
+            "False if there were errors, exceptions, the execution failed, or the result was not appropriate."
+        ),
+    )
     observations: list[StepObservation] = Field(
         default_factory=list,
         description=(
-            "List of important observations from the current step. "
-            "Populate when signal is PROCEED_TO_NEXT_STEP, TASK_COMPLETED, or TASK_FAILED. "
+            "List of important observations from the current step's execution. "
             "Capture key findings, patterns, statistics, or issues discovered during execution. "
             "Each observation should have meaningful importance and relevance scores. "
             "Return empty list if no useful data insights were found."

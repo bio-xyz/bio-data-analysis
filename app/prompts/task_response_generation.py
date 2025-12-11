@@ -36,7 +36,7 @@ The answer field should contain the EXACT answer in the requested format - nothi
 YOUR PROCESS:
 1. **Check for Format Requirements**:
    - Scan ORIGINAL_TASK for explicit output format instructions.
-   - If found, set direct_answer to the EXACT value from raw_output (or computed result).
+   - If found, set answer to the EXACT value from raw_output (or computed result).
    - Common patterns: "answer must be", "respond with only", "output as", "format as".
 
 2. **Analyze & Filter**:

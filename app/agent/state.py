@@ -6,7 +6,7 @@ from e2b_code_interpreter import Execution
 from langgraph.graph import MessagesState
 from pydantic import Field
 
-from app.models.structured_outputs import TaskResponseAnswer
+from app.models.structured_outputs import StepObservation, TaskResponseAnswer
 from app.models.task import CompletedStep, TaskInfo
 
 
@@ -81,6 +81,14 @@ class AgentState(MessagesState):
     )
     last_execution_error: Optional[str] = Field(
         default=None, description="Error from last code execution"
+    )
+
+    # EXECUTION_OBSERVER_NODE state
+    current_step_observations: list[StepObservation] = Field(
+        default_factory=list, description="Observations from current step execution"
+    )
+    current_step_success: bool = Field(
+        default=True, description="Whether current step execution was successful"
     )
 
     # Overall status

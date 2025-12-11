@@ -51,6 +51,9 @@ class Settings:
     # Code generation Node LLM Config
     CODE_GENERATION_LLM: LLMConfig = _get_llm_config("CODE_GENERATION", DEFAULT_LLM)
 
+    # Execution Observer Node LLM Config
+    EXECUTION_OBSERVER_LLM: LLMConfig = _get_llm_config("EXECUTION_OBSERVER", DEFAULT_LLM)
+
     # Answering Node LLM Config
     ANSWERING_LLM: LLMConfig = _get_llm_config("ANSWERING", DEFAULT_LLM)
 
