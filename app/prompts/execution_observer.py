@@ -20,19 +20,15 @@ Each observation requires:
   * WHAT TO EXCLUDE: Everything else - any output that isn't the direct answer to the question
   * RULE: If you removed it and the answer would be incomplete, keep it. Otherwise, remove it.
 
-- kind: "observation" | "rule" | "constraint"
+- kind: "observation" | "rule"
   * "observation": Facts derived from execution - what the analysis discovered
     - Examples: "29% of income values are missing", "Positive class is 12%", "3 download failures"
     - Planner usage: Optional context ("we've already checked X"), not something it must obey
     - Final answer usage: Core material for key findings and observations
-  * "rule": External rule that defines behavior/semantics
-    - Examples: "Nulls must be treated as wildcards", "IDs compared case-insensitively", "Only active users"
-    - Planner usage: MUST respect when generating code (joins, filters, comparisons)
-    - Final answer usage: Mentioned in conclusions/limitations as assumptions
-  * "constraint": Hard limits/filters/guardrails
-    - Examples: "Do not query tables outside schema 'analytics'", "Max 10k rows in memory", "Only columns A, B, C"
-    - Planner usage: Must not violate (resource limits, security, scope)
-    - Final answer usage: Sometimes mentioned if it affects completeness
+  * "rule": External rules and constraints that define behavior/semantics/limits
+    - Examples: "Nulls must be treated as wildcards", "IDs compared case-insensitively", "Only active users", "Do not query tables outside schema 'analytics'", "Max 10k rows in memory"
+    - Planner usage: MUST respect when generating code (joins, filters, comparisons, resource limits, security, scope)
+    - Final answer usage: Mentioned in conclusions/limitations as assumptions or scope restrictions
 
 - source: "data" | "spec" | "user"
   * "data": Generated from actual code execution
@@ -90,18 +86,25 @@ When you spot special values, document: WHAT the value is, HOW MANY occurrences,
 KIND AND SOURCE ASSIGNMENT GUIDELINES:
 - When you discover a fact from code output → kind="observation", source="data"
 - When you read a rule from documentation/README/metadata → kind="rule", source="spec"
-- When user explicitly stated a requirement in the task → kind="rule" or "constraint", source="user"
-- For hard limits mentioned in docs (e.g., "max 1000 API calls") → kind="constraint", source="spec"
-- For user-specified filters (e.g., "only last 30 days") → kind="constraint", source="user"
+- When user explicitly stated a requirement in the task → kind="rule", source="user"
+- For hard limits mentioned in docs (e.g., "max 1000 API calls") → kind="rule", source="spec"
+- For user-specified filters (e.g., "only last 30 days") → kind="rule", source="user"
 
 WHY KIND AND SOURCE MATTER:
-- The planner MUST obey items with kind="rule" or "constraint" when generating code
+- The planner MUST obey items with kind="rule" when generating code
 - Items with source="user" have highest priority and must never be silently ignored
 - When evidence conflicts: user > spec > data
 - Final answer must mention rules/constraints that affect interpretation
 
+INTERPRETING RESULTS WITH PREVIOUS RULES:
+When previous rules exist, observations MUST align with those rules. Do NOT generate observations that contradict established rules.
+- If rule: "Nulls are wildcards" → observations about filtering must respect this semantic
+- If rule: "Max 10k rows" → observations about data size should acknowledge this constraint
+- Focus on findings that are CONSISTENT with the rule framework, not random facts that ignore context
+
 CRITICAL OBSERVATION RULES:
 - RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
+- Observations must RESPECT previously established rules
 - Do NOT explain the code
 - Do NOT describe the workflow EXCEPT it is directly relevant to observations
 - Do NOT speculate beyond what the output supports
@@ -117,6 +120,7 @@ def build_execution_observer_prompt(
     current_step_description: Optional[str] = None,
     execution_output: Optional[str] = None,
     execution_error: Optional[str] = None,
+    previous_rules: Optional[list] = None,
 ) -> str:
     """
     Build the user prompt for the execution observer node.
@@ -127,6 +131,7 @@ def build_execution_observer_prompt(
         current_step_description: Detailed description of the current step
         execution_output: Output from code execution (if any)
         execution_error: Error from code execution (if any)
+        previous_rules: List of previously discovered rules to consider
 
     Returns:
         str: The formatted user prompt
@@ -135,6 +140,11 @@ def build_execution_observer_prompt(
         "=== ORIGINAL TASK ===",
         f"Task: {task_description}",
     ]
+
+    if previous_rules:
+        prompt_parts.append("\n=== PREVIOUS RULES ===")
+        for rule in previous_rules:
+            prompt_parts.append(f"- {rule.get('title')}: {rule.get('summary')}")
 
     prompt_parts.append("\n=== CURRENT STEP TO ANALYZE ===")
     prompt_parts.append(f"Goal: {current_step_goal}")

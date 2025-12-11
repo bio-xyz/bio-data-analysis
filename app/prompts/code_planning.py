@@ -108,7 +108,7 @@ Observations are your primary source of context. Each observation has these fiel
 - step_number: When it was observed (later steps are more recent)
 - title: Concise summary of the finding
 - summary: Detailed description with specific values
-- kind: "observation" | "rule" | "constraint"
+- kind: "observation" | "rule"
 - source: "data" | "spec" | "user"
 - raw_output: (Optional) Exact code output when the value is critical
 - importance (1-5): Intrinsic strength of the finding
@@ -119,72 +119,27 @@ KIND DETERMINES HOW TO USE THE OBSERVATION:
    - Examples: "29% missing values", "Positive class is 12%"
    - Use to inform next steps, but not mandatory to obey
 
-2. kind="rule" - Behavioral rules/semantics you MUST follow
-   - Examples: "Nulls are wildcards", "IDs are case-insensitive"
+2. kind="rule" - Behavioral rules and constraints you MUST follow
+   - Examples: "Nulls are wildcards", "IDs are case-insensitive", "Only schema 'analytics'", "Max 10k rows in memory"
    - MANDATORY: Include in step_description so code generator obeys them
-   - RULES CHANGE HOW CODE MUST BEHAVE - they define semantics, not just facts!
-
-3. kind="constraint" - Hard limits/guardrails you MUST NOT violate
-   - Examples: "Only schema 'analytics'", "Max 10k rows in memory"
-   - MANDATORY: Include in step_description to prevent violations
-   - CONSTRAINTS ARE GUARDRAILS - they limit what code CAN do!
-
-CRITICAL: CONSTRAINTS ARE HARD LIMITS - THEY RESTRICT OPERATIONS!
-A constraint is NOT just a limit to mention - it PREVENTS certain operations.
-
-Example constraint: "Only use tables from schema 'reporting'"
-- WRONG understanding: "note that there's a reporting schema"
-- CORRECT understanding: "queries MUST NOT access tables outside 'reporting' schema"
-
-Example constraint: "Maximum 5000 rows per API request"
-- WRONG understanding: "mention the 5000 limit exists"
-- CORRECT understanding: "code MUST paginate/batch if data exceeds 5000 rows"
-
-Example constraint: "Date range limited to last 90 days"
-- WRONG understanding: "note that 90-day range is available"
-- CORRECT understanding: "queries MUST include date filter >= (today - 90 days)"
-
-When transferring constraints to step_description, you must:
-1. STATE the constraint explicitly
-2. SPECIFY what operations are FORBIDDEN or LIMITED
-3. DESCRIBE how code must work AROUND the constraint
-
-BAD step_description (mentions constraint but doesn't enforce):
-"Query sales data from the database. Note: only reporting schema allowed."
-
-GOOD step_description (enforces constraint):
-"Query sales data. CONSTRAINT: Only 'reporting' schema is accessible.
-Use reporting.sales_summary table (NOT raw.transactions which is forbidden).
-All table references must be prefixed with 'reporting.' schema."
-
-CRITICAL: RULES DEFINE SEMANTICS - THEY CHANGE LOGIC, NOT JUST TEXT!
-A rule is NOT just a fact to mention - it's a semantic that CHANGES how code must work.
-
-Example rule: "Empty string in region field means 'applies globally'"
-- WRONG understanding: "mention that some regions are empty"
-- CORRECT understanding: "when filtering by region, empty string = matches ANY region"
-
-If you're filtering for region='Europe' and a record has region='':
-- WRONG: Skip this record (it doesn't match 'Europe')
-- CORRECT: Include this record (empty means "matches ANY region including Europe")
+   - RULES DEFINE HOW CODE MUST BEHAVE - they specify semantics and limits, and can PREVENT certain operations!
 
 When transferring rules to step_description, you must:
 1. STATE the rule explicitly
-2. EXPLAIN what it means for the current operation
-3. SPECIFY the exact logic change required
+2. SPECIFY what operations are FORBIDDEN or LIMITED
+3. DESCRIBE how code must work AROUND the rule and what logic changes are required
+4. Use keywords like MUST, NEVER, ONLY, ALWAYS, REQUIRED, CONSTRAINT to emphasize mandatory behavior
+5. UNDERSTAND that rules change LOGIC, not just text - they define new semantics for how operations work and they change how the code that will be generated must work
+6. COMBINE related rules from different steps into coherent constraints
 
-BAD step_description (mentions rule but ignores its meaning):
-"Filter products where region='Europe'. Note: empty regions apply globally."
+Example - Multiple rules affecting database queries:
+- Step 2: "Only schema 'analytics'" + Step 5: "Never query 'temp_staging'" + Step 7: "Left join on users"
+→ Combined in step_description: "Query from analytics schema only. Never use temp_staging table. Use LEFT JOIN for user table to preserve all records."
 
-GOOD step_description (applies rule's semantic meaning):
-"Filter products that APPLY TO Europe. Per the rule 'empty means global':
-include products where region='Europe' OR region='' (empty=wildcard).
-Same logic applies to any field with wildcard semantics."
-
-SOURCE DETERMINES PRIORITY:
-- source="user": Highest priority. NEVER ignore. User's explicit request.
-- source="spec": Binding rules from documentation. Obey unless user overrides.
-- source="data": Discovered from execution. May be refined by later steps.
+SOURCE PROVIDES CONTEXT FOR INTERPRETING IMPORTANCE:
+- source="user": User's explicit requirements - treat high importance/relevance as absolute priority
+- source="spec": Documented rules and specifications - high importance indicates binding requirements
+- source="data": Discovered facts from execution - importance/relevance may change as more data is discovered
 
 When analyzing observations:
 - **Relevance Filter**: Focus on high-relevance (4-5) observations for planning next steps.
@@ -230,26 +185,22 @@ BE THOUGHTFUL ABOUT UNIQUE VALUE COUNTS:
 Example for high-cardinality:
 "Column 'product_id' has 15,234 unique values. Special cases found: 'UNKNOWN' (234 rows), 'TEST_*' pattern (12 rows to exclude), 3 malformed IDs starting with '#'."
 
-CONSTRAINTS AND SPECIAL CASES - MANDATORY TO INCLUDE:
+RULES, CONSTRAINTS AND SPECIAL CASES - MANDATORY TO INCLUDE:
 **THIS IS NOT OPTIONAL** - Edge cases from observations MUST appear in step_description.
-The code generator CANNOT see observations directly. If you don't transfer constraints, they will be ignored.
+The code generator CANNOT see observations directly. If you don't transfer rules, they will be ignored.
 
 BEFORE writing step_description, scan ALL observations for:
 - Semantic special values: -1, 9999, '*', 'N/A', 'unknown', etc. with domain meaning
 - Null handling rules: which nulls to impute vs preserve vs filter
 - Valid "anomalies": negatives, duplicates, outliers that are CORRECT for the domain
-- Format constraints: date formats, case sensitivity, encoding requirements
+- Format constraints & rules: date formats, case sensitivity, encoding requirements
 - Boundary conditions: min/max values, date ranges, valid categories
 - Exclusions: rows/columns to skip, values to ignore
 
-FAILURE MODE - WHAT HAPPENS IF YOU SKIP THIS:
+CONSEQUENCES OF SKIPPING THIS:
 Observation says: "'-1' in age column means 'unknown' (47 occurrences)"
 You write: "Calculate mean age"
 Code generator produces: mean(age) → includes -1 values → WRONG RESULT
-
-CORRECT APPROACH:
-You write: "Calculate mean age. EXCLUDE -1 values (47 rows) which represent 'unknown'."
-Code generator produces: mean(age[age != -1]) → CORRECT RESULT
 
 OBSERVATION TRANSFER CHECKLIST (run this mentally):
 □ Did observations mention any special/placeholder values? → INCLUDE handling instructions
@@ -258,56 +209,30 @@ OBSERVATION TRANSFER CHECKLIST (run this mentally):
 □ Did observations note format issues? → INCLUDE normalization requirements
 □ Did observations identify boundary cases? → SPECIFY how to handle edges
 
-CONSTRAINT TRANSFER CHECKLIST (CRITICAL - constraints limit operations!):
-□ For EACH constraint with kind="constraint", ask: "What does this FORBID or LIMIT?"
-□ Schema/table restrictions → ONLY reference allowed schemas/tables, list forbidden ones
-□ Row/size limits → code MUST paginate, batch, or sample to stay within limits
-□ Date/time restrictions → queries MUST include appropriate date filters
-□ Resource limits → operations MUST avoid exceeding memory/CPU/time bounds
-□ Access restrictions → code MUST NOT attempt forbidden operations
-□ DON'T just mention the constraint - SPECIFY what is FORBIDDEN and how to COMPLY
+SILENT SELF-CHECK (Run this mentally before writing step_description):
 
-RULE TRANSFER CHECKLIST (CRITICAL - rules change logic!):
-□ For EACH rule with kind="rule", ask: "How does this change the code's behavior?"
-□ Wildcard/default rules → filtering must use OR logic (value=X OR value IS wildcard)
-□ Case-insensitivity rules → all comparisons must be case-normalized
-□ Matching/lookup rules → define exact join/filter semantics
+RULE TRANSFER CHECKLIST (CRITICAL - rules change how code must work!):
+□ For EACH rule with kind="rule", ask: "How does this FORBID, LIMIT, or CHANGE the code's behavior?"
+□ Schema/access restrictions → ONLY use allowed resources, list forbidden ones  
+□ Wildcard/null semantics → filtering must use OR logic (value=X OR value IS wildcard)
+□ Case/format rules → all operations must normalize appropriately
+□ Size/resource limits → code MUST paginate, batch, or sample to stay within bounds
 □ Calculation rules → specify exact formula with all edge cases
 □ DON'T just mention the rule - TRANSLATE it into explicit logic instructions
 
-EXAMPLE - Constraint-aware step_description:
-"Compute summary statistics for 'dosage_mg' column.
-- Data: 1,247 rows, 23 nulls (true missing - impute with median 45.0)
-- EXCLUDE: -1 values (12 rows = 'dose not recorded', not real dosage)
-- VALID: 3 values > 1000mg are correct (high-dose protocol patients)
-- Range: 0.5 to 2500 mg (0 is valid = placebo group)"
+OBSERVATION TRANSFER CHECKLIST:
+□ Special/placeholder values → INCLUDE handling instructions
+□ Format issues → INCLUDE normalization requirements  
+□ Valid anomalies → EXPLICITLY state they're valid
+□ Boundary cases → SPECIFY how to handle edges
 
-ALWAYS ask: "What constraints from observations would change how the code should behave?"
+ALWAYS ask: "What rules would change how the code should behave?"
 
-BAD step_description (vague, no observation data):
-"Plot the time series data and analyze trends"
-
-GOOD step_description (specific, observation-driven):
-"Create line plot of 'revenue' (y-axis, range 1000-50000) vs 'transaction_date' (x-axis, 2022-01-01 to 2023-12-31).
-Data has 12,456 rows, no missing values in these columns. Save as 'revenue_trend.png'."
-
-BAD step_description (generic):
-"Handle missing values in the dataset"
-
-GOOD step_description (exact values from observations):
-"Impute missing values: 'age' column has 23 nulls (1.8% of 1,247 rows), median=34.5.
-'income' column has 156 nulls (12.5%), will use mean=52,340. 'name' column complete."
-
-BAD step_description (implementation-focused):
-"Use pandas fillna() with median for age column"
-
-GOOD step_description (what, not how):
-"Fill 23 missing 'age' values using median (34.5). Verify no nulls remain after imputation."
-
+⚠️ FAILURE TO PROPERLY TRANSFER RULES WILL RESULT IN INCORRECT CODE GENERATION. ASK YOURSELF IF YOU HAVE TRANSFERRED ALL RULES AND CONSTRAINTS CORRECTLY BEFORE PROCEEDING.
 CHECKLIST FOR step_description:
 □ Did I include exact column/file names from observations?
 □ Did I include specific numeric values (counts, means, thresholds)?
-□ Did I specify data ranges, formats, or constraints found?
+□ Did I specify data ranges, formats, or rules found?
 □ Is this description code-free (no function names, no syntax)?
 □ Could a code generator implement this without re-reading the data, metadata or docs?
 
@@ -386,7 +311,7 @@ def build_code_planning_prompt(
                     if obs.raw_output:
                         obs_dict["raw_output"] = obs.raw_output
 
-                    if obs.kind in ("rule", "constraint"):
+                    if obs.kind == "rule":
                         all_rules.append(obs_dict)
                     else:
                         all_observations.append(obs_dict)
@@ -417,13 +342,11 @@ def build_code_planning_prompt(
         if current_step_observations:
             prompt_parts.append("\nExecution Observations:")
 
-            rules = [
-                o for o in current_step_observations if o.kind in ("rule", "constraint")
-            ]
+            rules = [o for o in current_step_observations if o.kind == "rule"]
             findings = [o for o in current_step_observations if o.kind == "observation"]
 
             if rules:
-                prompt_parts.append("  Rules & Constraints Discovered:")
+                prompt_parts.append("  Rules Discovered:")
                 for obs in rules:
                     obs_dict = {
                         "kind": obs.kind,
