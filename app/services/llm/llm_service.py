@@ -460,8 +460,6 @@ class LLMService:
     def generate_reflection(
         self,
         task_description: str,
-        current_step_number: int,
-        current_step_goal: str,
         current_step_success: bool,
         current_step_observations: Optional[list[StepObservation]] = None,
         world_observations: Optional[list[StepObservation]] = None,
@@ -474,8 +472,6 @@ class LLMService:
 
         Args:
             task_description: Description of the overall task
-            current_step_number: The step number just completed
-            current_step_goal: Goal of the step just completed
             current_step_success: Whether the current step succeeded
             current_step_observations: New observations from the current step
             world_observations: Existing world observations to merge with
@@ -488,8 +484,6 @@ class LLMService:
         system_prompt = get_reflection_system_prompt()
         user_prompt = build_reflection_prompt(
             task_description=task_description,
-            current_step_number=current_step_number,
-            current_step_goal=current_step_goal,
             current_step_success=current_step_success,
             current_step_observations=current_step_observations,
             world_observations=world_observations,

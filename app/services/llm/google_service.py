@@ -76,6 +76,10 @@ class GoogleService(BaseLLMService, metaclass=SingletonMeta):
             "response_model": response_model,
             "generation_config": {
                 "max_tokens": llm_config.max_tokens,
+                "thinking_config": genai.types.ThinkingConfig(
+                    include_thoughts=False,
+                    thinking_level=genai.types.ThinkingLevel.LOW,
+                ),
                 **kwargs,
             },
         }

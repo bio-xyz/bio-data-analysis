@@ -444,8 +444,6 @@ def reflection_node(state: AgentState) -> dict:
     llm_service = LLMService(settings.REFLECTION_LLM)
     decision: ReflectionDecision = llm_service.generate_reflection(
         task_description=task_description,
-        current_step_number=step_number,
-        current_step_goal=current_step_goal,
         current_step_success=current_step_success,
         current_step_observations=current_step_observations,
         world_observations=world_observations,

@@ -12,7 +12,7 @@ Your role is to examine the output from executed code and identify important fin
 OBSERVATION REQUIREMENTS:
 Each observation requires:
 - title: Concise summary (e.g., "Strong correlation found", "30% missing data detected")
-- summary: Detailed description with specific values and findings. Might include whole output section if relevant to the user task.
+- summary: Detailed description with specific values and findings. Might include whole output section if relevant to the ORIGINAL TASK.
 - raw_output: The exact value or content that answers the user's question.
   * WHEN TO USE: User asks for specific values, exact content, or specifies output format
   * WHEN TO SKIP: Summary adequately captures the finding (leave empty)
@@ -59,13 +59,13 @@ Each observation requires:
   * 1 = Irrelevant: Interesting but unrelated (e.g., age distribution when studying churn)
 
 OBSERVATION GUIDELINES:
-- Focus on findings that advance understanding of the data or task
+- Focus on findings that advance understanding of the data or ORIGINAL TASK
 - Include both positive findings and issues/blockers discovered
 - Be specific with numbers and values
 - Consider both importance AND relevance - they're different!
 - A finding can be important (strong signal) but low relevance (off-topic)
 - A finding can be highly relevant (answers the question) even if moderate importance
-- CAPTURE METADATA INSIGHTS: When reading documentation/README/metadata files, record information relevant to the task (column definitions, units, categorical mappings)
+- CAPTURE METADATA INSIGHTS: When reading documentation/README/metadata files, record information relevant to the ORIGINAL TASK (column definitions, units, categorical mappings)
 
 CAPTURE DATA QUIRKS AND EDGE CASES:
 The code_planning node relies on your observations to handle special cases correctly.
@@ -86,7 +86,7 @@ When you spot special values, document: WHAT the value is, HOW MANY occurrences,
 KIND AND SOURCE ASSIGNMENT GUIDELINES:
 - When you discover a fact from code output → kind="observation", source="data"
 - When you read a rule from documentation/README/metadata → kind="rule", source="spec"
-- When user explicitly stated a requirement in the task → kind="rule", source="user"
+- When user EXPLICITLY stated a requirement in the ORIGINAL TASK → kind="rule", source="user"
 - For hard limits mentioned in docs (e.g., "max 1000 API calls") → kind="rule", source="spec"
 - For user-specified filters (e.g., "only last 30 days") → kind="rule", source="user"
 
@@ -97,12 +97,11 @@ WHY KIND AND SOURCE MATTER:
 - Final answer must mention rules/constraints that affect interpretation
 
 CRITICAL OBSERVATION RULES:
-- RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
-- Observations must RESPECT previously established rules
+- THE MOST IMPORTANT - RELEVANCE IS CALCULATED WITH RESPECT TO THE ORIGINAL TASK, NOT THE CURRENT STEP
 - Do NOT explain the code
 - Do NOT describe the workflow EXCEPT it is directly relevant to observations
 - Do NOT speculate beyond what the output supports
-- IMPORTANT: If the output contains no useful data insight, return an empty list
+- IMPORTANT: If the output contains no useful obserations based on the above guideliens, return an empty list
 
 CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 """

@@ -29,10 +29,9 @@ Each observation has:
   * "user": **EXPLICIT** user instruction (high priority)
 - raw_output: Exact value when critical for answering
 - importance (1-5): Intrinsic strength of the finding
-- relevance (1-5): How directly it helps answer the original task
+- relevance (1-5): How directly it helps answer the ORIGINAL TASK
 
-CATEGORIZATION FOR OUTPUT:
-You must categorize observations into two groups:
+CATEGORIZATION OF OBSERVATIONS:
 1. RULES: All observations with kind="rule" - these define constraints and behavior
 2. DATA_OBSERVATIONS: All observations with kind="observation" - these are findings
 
@@ -54,28 +53,21 @@ REFINEMENT GUIDELINES:
 - **Add context**: If a new observation provides context for an existing one, enrich the existing summary
 - **Update values**: If new data corrects previous values, use the newer values
 - **Preserve rules**: Rules (kind="rule") should rarely be removed unless explicitly contradicted
-- **Filter irrelevant**: Remove observations with very low relevance (1-3) if they provide no meaningful context for the task
-- **Maintain relevance**: Re-evaluate relevance scores based on how observations connect to the original task
+- **Filter irrelevant**: Remove observations with very low relevance (1-3) if they provide no meaningful context for the ORIGINAL TASK
+- **Maintain relevance**: Re-evaluate relevance scores based on how observations connect to the ORIGINAL TASK
 - **Consolidate related findings**: Group related data observations into coherent summaries when appropriate
 - **Step number tracking**: If you refine or merge observations with the current step's observations, ensure the step_number reflects current step
 
 CRITICAL REFINEMENT REQUIREMENTS:
-- NEVER MERGE AND REFINE SPEC-BASED OBSERVATIONS WITHOUT PRESERVING THEIR ORIGINAL CONTEXT
+- NEVER MERGE AND REFINE SPEC OR USER SOURCE OBSERVATIONS WITHOUT PRESERVING THEIR ORIGINAL CONTEXT
 - NEVER UNGENERALIZE RULE INTO A DATA OBSERVATION
-
-WHEN STEP FAILED:
-- PRESERVE failure-related observations (errors, issues, blockers)
-- These are CRITICAL for the code_planning node to understand what went wrong
-- Mark them appropriately (they should have kind="observation" unless they reveal a constraint/rule)
-- Do NOT filter out failure observations just because they have low importance
+- IRRELEVANT OBSERVATIONS MUST NOT BE INCLUDED UNLESS THEY PROVIDE CRITICAL CONTEXT
+- HIGH-IMPORTANCE DOES NOT IMPLY HIGH-RELEVANCE - THEY ARE DISTINCT METRICS - DO NOT CONFLATE
+- HIGH-IMPORTANCE **AND** HIGH-RELEVANCE OBSERVATIONS MUST BE PRESERVED
 
 OUTPUT REQUIREMENTS:
-- Return TWO separate lists: rules and data_observations
-- Each list should be refined, deduplicated, and contextually enriched
-- Preserve step_number for tracking when observations were made
-- Ensure all rules that affect code behavior are preserved
-- Filter out completely irrelevant observations (relevance 1-2) unless they provide critical context
-- Total observations should be reasonable (aim for quality over quantity)
+- FOLLOW ABOVE GUIDELINES RIGOROUSLY
+- Total number of observations should be reasonable (QUALITY OVER QUANTITY)
 
 CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 """
@@ -83,8 +75,6 @@ CRITICAL: Return ONLY valid JSON without any markdown formatting or code fences.
 
 def build_reflection_prompt(
     task_description: str,
-    current_step_number: int,
-    current_step_goal: str,
     current_step_success: bool,
     current_step_observations: Optional[list[StepObservation]] = None,
     world_observations: Optional[list[StepObservation]] = None,
@@ -94,8 +84,6 @@ def build_reflection_prompt(
 
     Args:
         task_description: Description of the overall task
-        current_step_number: The step number just completed
-        current_step_goal: Goal of the step just completed
         current_step_success: Whether the current step succeeded
         current_step_observations: New observations from the current step
         world_observations: Existing world observations to merge with
@@ -108,22 +96,17 @@ def build_reflection_prompt(
         f"Task: {task_description}",
     ]
 
-    prompt_parts.append(f"\n=== CURRENT STEP (Just Completed) ===")
-    prompt_parts.append(f"Step Number: {current_step_number}")
-    prompt_parts.append(f"Goal: {current_step_goal}")
-    prompt_parts.append(f"Status: {'SUCCESS' if current_step_success else 'FAILED'}")
-
     # Add current step observations
-    prompt_parts.append("\n=== NEW OBSERVATIONS FROM CURRENT STEP ===")
+    prompt_parts.append("\n=== NEW OBSERVATIONS ===")
     if current_step_observations:
         new_rules, new_data_obs = split_observations_to_dict(current_step_observations)
 
         if new_rules:
-            prompt_parts.append("New Rules:")
+            prompt_parts.append("New RULES:")
             prompt_parts.append(json.dumps(new_rules, indent=2))
 
         if new_data_obs:
-            prompt_parts.append("New Data Observations:")
+            prompt_parts.append("New DATA_OBSERVATIONS:")
             prompt_parts.append(json.dumps(new_data_obs, indent=2))
 
         if not new_rules and not new_data_obs:
@@ -139,11 +122,11 @@ def build_reflection_prompt(
         )
 
         if existing_rules:
-            prompt_parts.append("Existing Rules:")
+            prompt_parts.append("Existing RULES:")
             prompt_parts.append(json.dumps(existing_rules, indent=2))
 
         if existing_data_obs:
-            prompt_parts.append("Existing Data Observations:")
+            prompt_parts.append("Existing DATA_OBSERVATIONS:")
             prompt_parts.append(json.dumps(existing_data_obs, indent=2))
 
         if not existing_rules and not existing_data_obs:
